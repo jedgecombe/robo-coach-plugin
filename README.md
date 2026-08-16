@@ -26,18 +26,32 @@ anyone's training data.
 
 ## Install
 
+The only thing you need to *install* it is **Claude Code** (desktop app or CLI) — it fetches and
+runs the plugin for you. **You don't need git**, and there's nothing to clone by hand.
+
+**Point-and-click (no terminal):** in the Claude Code desktop app, open the plugin browser with
+`/plugin` → **Marketplaces** tab → add `jedgecombe/robo-coach-plugin` → **Discover** tab →
+select **robo-coach** → **Install**.
+
+**Or by command** (in a terminal `claude` session, or typed into the app):
+
 ```bash
 /plugin marketplace add jedgecombe/robo-coach-plugin
 /plugin install robo-coach@robo-coach
 ```
 
-(Or point the marketplace at a local clone: `/plugin marketplace add /path/to/robo-coach-plugin`.)
+(Testing a local clone instead: `/plugin marketplace add /path/to/robo-coach-plugin`.)
 
 ## Quick start
 
-**Requirements:** [uv](https://docs.astral.sh/uv/) (runs `push_week.py` with no venv or install
-step — `curl -LsSf https://astral.sh/uv/install.sh | sh`, or `brew install uv`) and `python3`
-(for the privacy hook; standard library only). Plus a Garmin watch, intervals.icu, and Strava.
+**What you need:**
+- **Claude Code** (desktop app or CLI) — to install and run the plugin. No git required.
+- **[uv](https://docs.astral.sh/uv/)** — runs `push_week.py` with no venv or install step
+  (`curl -LsSf https://astral.sh/uv/install.sh | sh`, or `brew install uv`). It also brings a
+  modern Python along, so you don't have to manage one.
+- **python3** — only for the privacy pre-commit hook (standard library; the system one is fine).
+- **Accounts / hardware:** a **Garmin** watch, a free **intervals.icu** account, and **Strava** —
+  all walked through in "One-time setup" below.
 
 1. Make a new **private** directory for your training block and `cd` into it.
 2. Run `/robo-coach:setup` — it copies the templates and scripts, interviews you to fill in your
