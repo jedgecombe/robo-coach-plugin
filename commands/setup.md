@@ -97,16 +97,32 @@ missed-days policy, "pain that changes gait ends the run," the fuelling carb-rat
 `notes/shared/`). Walk the athlete through them, adjust to their case, and keep the
 `[evidence]` / `[convention]` / `[preference]` tags honest — don't dress a preference up as science.
 
-**Credentials & privacy**
+**Credentials**
 - `[ -f .env ] || cp .env.example .env`, then have the athlete **paste** their intervals.icu
   API key + athlete id into it. **Never type these yourself — ask them to paste.**
-- Create `.privacy-markers` (gitignored) — the athlete's name, email, and any place/club/team
-  names that must never reach a shared file, one per line. This powers the content scan.
 
-## 4. Install the privacy pre-commit hook
+## 4. Install the privacy safety net — MANDATORY, and verify it
 
-Install a small wrapper — more robust than a symlink: no dependency on the script's exec bit,
-and it resolves the repo root even from a subdirectory or a worktree:
+This is the step that keeps the athlete's name and data out of any repo they might share. It is
+**not optional and must not be skipped.** Actually run the commands below, and **do not tell the
+athlete setup is complete unless the self-test in (c) prints PASS** — a scaffolded repo with no
+`.privacy-markers` and no hook looks fine and silently protects nothing.
+
+**a. Create `.privacy-markers`** (gitignored). Ask the athlete for their name, email, and any
+place / club / team names that must never reach a shared file. Insist on at least their name — an
+empty markers file disables the content scan. Write one per line:
+
+```bash
+cat > .privacy-markers <<'EOF'
+<athlete name>
+<athlete email>
+<club / place / team ...>
+EOF
+```
+
+**b. Install the pre-commit hook** — a wrapper (robust: no dependency on the script's exec bit,
+resolves the repo root from anywhere). If the athlete already has a `pre-commit` hook, don't
+clobber it — add the `check_privacy.py` call to theirs instead:
 
 ```bash
 HOOK="$(git rev-parse --git-path hooks)/pre-commit"
@@ -115,12 +131,26 @@ cat > "$HOOK" <<'SH'
 exec python3 "$(git rev-parse --show-toplevel)/scripts/check_privacy.py"
 SH
 chmod +x "$HOOK"
-python3 scripts/check_privacy.py --all
 ```
 
-The audit should report clean. If it flags anything, fix it before the first commit. If the
-athlete already has a `pre-commit` hook, **don't clobber it** — add the `check_privacy.py` call
-to their existing hook instead.
+**c. Verify the net catches a leak** — plant the first marker in a tracked file, try to commit,
+and confirm the hook blocks it, then clean up:
+
+```bash
+python3 scripts/check_privacy.py --all              # baseline: expect clean
+printf '%s\n' "$(head -1 .privacy-markers)" > .rc-privacy-selftest
+git add .rc-privacy-selftest
+if git commit -m "privacy self-test" >/dev/null 2>&1; then
+  echo "FAIL: hook did NOT block the marker — this repo is UNPROTECTED"
+  git reset --soft HEAD~1 2>/dev/null || git update-ref -d HEAD   # undo (root-commit safe)
+else
+  echo "PASS: hook blocked the planted marker"
+fi
+git rm --cached --ignore-unmatch -q .rc-privacy-selftest 2>/dev/null; rm -f .rc-privacy-selftest
+```
+
+**If this prints FAIL, stop and fix it** (hook missing/not executable, or `.privacy-markers`
+empty) before continuing — the athlete has no privacy protection until it prints PASS.
 
 ## 5. Connect the pipes (one-time, the user does this)
 
@@ -134,7 +164,11 @@ uv run scripts/push_week.py weeks/<YYYY-Www>.yaml --dry-run
 
 ## 6. Hand off
 
-Two last things:
+First confirm the safety net is live: **step 4's self-test printed PASS**, `.privacy-markers`
+exists and is non-empty, and `.git/hooks/pre-commit` exists. If any of those is missing, setup
+is **not** finished — go back to step 4. Don't describe setup as complete otherwise.
+
+Then two last things:
 
 - **Strava read access.** The check-in pulls what the athlete actually ran from Strava via an
   MCP connector — confirm they've connected one (see the plugin README). Without it, the
