@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "robo-coach",
+  "version": "0.1.0",
+  "description": "AI marathon/endurance coach. Reviews your training week from Strava and pushes adapted workouts to your Garmin via intervals.icu. You supply your own local, gitignored plan and athlete data; the plugin supplies the coaching discipline.",
+  "author": {
+    "name": "Jamie Edgecombe",
+    "url": "https://github.com/jedgecombe"
+  },
+  "homepage": "https://github.com/jedgecombe/robo-coach-plugin",
+  "repository": "https://github.com/jedgecombe/robo-coach-plugin",
+  "keywords": [
+    "running",
+    "marathon",
+    "coaching",
+    "training",
+    "strava",
+    "garmin",
+    "intervals.icu",
+    "endurance"
+  ],
+  "license": "MIT"
+}

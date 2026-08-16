@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "robo-coach",
+  "description": "AI endurance-coaching for Claude Code — weekly Strava review and adaptive Garmin workouts via intervals.icu.",
+  "owner": {
+    "name": "Jamie Edgecombe",
+    "url": "https://github.com/jedgecombe"
+  },
+  "plugins": [
+    {
+      "name": "robo-coach",
+      "source": "./",
+      "description": "AI marathon/endurance coach — reviews your week from Strava and pushes adapted workouts to your Garmin via intervals.icu."
+    }
+  ]
+}

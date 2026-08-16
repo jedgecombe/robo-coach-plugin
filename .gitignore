@@ -1,0 +1,6 @@
+# This is the PLUGIN repo — it ships the system, so it holds no personal data.
+# (The privacy-protecting .gitignore for a user's training repo lives in templates/gitignore.)
+__pycache__/
+*.pyc
+.DS_Store
+.venv/

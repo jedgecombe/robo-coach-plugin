@@ -1,0 +1,36 @@
+# Example file — real weeks (weeks/20*) are gitignored.
+# Step-target convention (pace ranges on hard efforts only; easy work carries a
+# bare duration) is enforced by push_week.py — see its docstring. Don't restate it.
+week: YYYY-Wnn
+# targets: hard-only   # optional per-week override — targets on hard efforts only
+#                      # (default is 'all': pace/HR shown on every step)
+workouts:
+  - date: YYYY-MM-DD
+    name: "Easy + 4 strides"
+    type: Run
+    description: |
+      - 7km
+
+      Strides 4x
+      - 20s
+      - 60s
+
+      Easy ~5:10-5:40/km, then 4 strides at the end — relaxed-fast, tall
+      posture, quick feet, walk/jog the 60s back. Not sprints.
+
+  - date: YYYY-MM-DD
+    name: "Reps 6x2min"
+    type: Run
+    description: |
+      Warmup
+      - 2km
+
+      Main 6x
+      - 2m 4:05-4:15/km Pace
+      - 90s
+
+      Cooldown
+      - 2km
+
+      Warmup/cooldown easy ~5:10-5:40/km, 90s recovery jog between reps.
+      Controlled — finish feeling you could do two more.

@@ -1,0 +1,28 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+# exported / side-load watch files (e.g. pace-target-test.fit) — debug artifacts
+*.fit
+
+# Personal / machine-local Claude Code overrides (shared config is .claude/settings.json)
+.claude/settings.local.json
+
+# Personal data stays local — share the system, not the athlete.
+# The *.example.* files show the shape of each.
+athlete.md
+PLAN.md
+weeks/20*
+
+# notes/ is private BY DEFAULT — a new note is ignored unless you deliberately
+# put it in notes/shared/. Fails closed: forgetting keeps something private,
+# rather than publishing it. (The glob matters — a bare `notes/` would make the
+# !exception below impossible; git can't re-include inside an excluded dir.)
+notes/*
+!notes/shared/
+
+# The list of strings that must never reach a tracked file. Gitignored for the
+# obvious reason. Enforced by scripts/check_privacy.py — install the hook with:
+#   ln -sf ../../scripts/check_privacy.py .git/hooks/pre-commit
+.privacy-markers
