@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "robo-coach",
   "version": "0.1.1",
-  "description": "AI marathon/endurance coach. Reviews your training week from Strava and pushes adapted workouts to your Garmin via intervals.icu. You supply your own local, gitignored plan and athlete data; the plugin supplies the coaching discipline.",
+  "description": "An AI endurance coach for Claude Code. Each week it reviews the training you actually ran — read from Strava — the way a real coach would, then drafts an adapted next week and syncs the workouts to your Garmin watch via intervals.icu. You supply your own local, gitignored plan and athlete data; the plugin supplies the coaching discipline.",
   "author": {
     "name": "Jamie Edgecombe",
     "url": "https://github.com/jedgecombe"

@@ -10,7 +10,7 @@
     {
       "name": "robo-coach",
       "source": "./",
-      "description": "AI marathon/endurance coach — reviews your week from Strava and pushes adapted workouts to your Garmin via intervals.icu."
+      "description": "An AI endurance coach — reviews the week you actually ran (from Strava) like a real coach, then syncs an adapted next week to your Garmin watch via intervals.icu."
     }
   ]
 }
