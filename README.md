@@ -71,6 +71,14 @@ telemetry, because the plan is never adapted off the watch data alone. There's d
 "run it unattended on a schedule" mode: an automated run couldn't have that conversation, which
 is the part that matters.
 
+**One behaviour worth knowing.** intervals.icu *silently drops* a step target it can't parse —
+the step is accepted as a bare duration and the push still reports success, so a session can
+land on your watch with no target on it at all. `push_week.py` rejects the forms known to fail
+(notably absolute-bpm heart-rate targets, which must be written as a percentage of threshold
+HR, e.g. `94-98% LTHR`), and the check-in skill reads the workout back from the API to confirm
+the targets survived. If you ever push hand-written step syntax, check the calendar entry
+rather than trusting the "pushed" message.
+
 ## Reading your week (Strava)
 
 The check-in pulls what you actually ran from **Strava**, read through an MCP connector — so

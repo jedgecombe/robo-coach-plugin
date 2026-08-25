@@ -61,7 +61,21 @@ ROOT = Path(__file__).resolve().parent.parent
 # which switches on the easy-step check below (see lint_description's targets_everywhere).
 DURATION = re.compile(r"^\d+(\.\d+)?(km|mi|min|m|s|h)$")
 PACE_TARGET = re.compile(r"^\d:\d{2}(-\d:\d{2})?/(km|mi) Pace(\s.*)?$")
-HR_TARGET = re.compile(r"^\d+(-\d+)? HR(\s.*)?$")
+# HR targets: intervals.icu's parser accepts ONLY percentage and zone forms.
+# Absolute bpm is silently DROPPED — "- 10m 168-175 HR" and "- 10m 168-175 bpm"
+# both come back from the API as a bare {"duration": 600} with no target, so the
+# step reaches the watch with nothing on it. This regex used to accept the bpm
+# form, which meant a whole HR-prescribed session linted clean and pushed empty
+# (caught 2026-08-23 on W35's 4×10′, by the athlete, after the push). Verified
+# against the live API that day: %LTHR and %HR parse, bare bpm does not.
+#
+# Use %LTHR, not %HR. %LTHR anchors on threshold HR (sport-settings `lthr`);
+# %HR anchors on max HR, so the same numbers mean something far harder — 94-98%
+# read as %HR scored Z7 in the same probe. `Z4 HR` parses too but is rejected
+# below: the house convention is explicit numbers, never zone references.
+HR_TARGET = re.compile(r"^\d+(\.\d+)?(-\d+(\.\d+)?)?% ?(LTHR|HR)(\s.*)?$")
+HR_ZONE_REF = re.compile(r"^Z\d+ ?(HR|Pace)(\s.*)?$")
+HR_BPM = re.compile(r"^\d+(-\d+)? ?(HR|bpm|BPM)(\s.*)?$")
 REPEAT_HDR = re.compile(r"^\w[\w /]*\d+x$")
 GROUP_HDRS = ("warmup", "cooldown", "main", "strides", "rest")
 # Groups whose steps are easy by definition, so they must carry a bare duration.
@@ -70,7 +84,12 @@ EASY_GROUPS = (None, "warmup", "cooldown", "strides", "rest")
 # A step "claims a target" only on a real target token — `\bHR\b` not a bare
 # substring, or the pace regex. Matching "HR" anywhere used to hard-fail any
 # step labelled THRESHOLD, which contains the letters H-R.
-CLAIMS_TARGET = re.compile(r"\bPace\b|\bHR\b|\d:\d{2}\s*(-\s*\d:\d{2})?\s*/(km|mi)")
+# \bHR\b does not match inside "LTHR" (T and H are both word chars, so there is
+# no boundary), so LTHR and bpm are listed explicitly — otherwise a %LTHR target
+# on an easy step would slip past the hard-only check unnoticed.
+CLAIMS_TARGET = re.compile(
+    r"\bPace\b|\bLTHR\b|\bHR\b|\bbpm\b|\bBPM\b|\d:\d{2}\s*(-\s*\d:\d{2})?\s*/(km|mi)"
+)
 
 
 def lint_description(name, desc, targets_everywhere=False):
@@ -108,7 +127,19 @@ def lint_description(name, desc, targets_everywhere=False):
             continue
         if not CLAIMS_TARGET.search(rest):
             continue
-        if not (PACE_TARGET.match(rest) or HR_TARGET.match(rest)):
+        if HR_BPM.match(rest):
+            errors.append(
+                f"{name}: step '{line}' — absolute bpm target '{rest}' is SILENTLY "
+                f"DROPPED by intervals.icu; the step would reach the watch with no "
+                f"target. Use a percentage of threshold HR instead, e.g. "
+                f"'94-98% LTHR' (check sport-settings `lthr` for the bpm it resolves to)"
+            )
+        elif HR_ZONE_REF.match(rest):
+            errors.append(
+                f"{name}: step '{line}' — zone reference '{rest}'; convention is "
+                f"explicit numbers (a pace range, or a % of LTHR), never zones"
+            )
+        elif not (PACE_TARGET.match(rest) or HR_TARGET.match(rest)):
             errors.append(f"{name}: step '{line}' — malformed target '{rest}'")
         elif group in EASY_GROUPS and not targets_everywhere:
             where = group or "easy/ungrouped"
@@ -116,6 +147,11 @@ def lint_description(name, desc, targets_everywhere=False):
                 f"{name}: {where} step '{line}' carries a pace/HR target — "
                 f"convention is targets on hard efforts only; easy work takes a "
                 f"bare duration and its pace guidance goes in the prose"
+            )
+        if HR_TARGET.match(rest) and "LTHR" not in rest:
+            warnings.append(
+                f"{name}: step '{line}' anchors on max HR (%HR) rather than "
+                f"threshold (%LTHR) — the same numbers mean a much harder effort"
             )
     return errors, warnings
 

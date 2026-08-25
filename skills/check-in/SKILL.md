@@ -139,9 +139,39 @@ uv run scripts/push_week.py weeks/<next-week>.yaml --status    # confirm the wor
 The date guard will refuse a week that's entirely in the past — if it fires, your date is
 wrong, not the plan.
 
-**`--status` is not proof it reached the watch.** It confirms intervals.icu holds the events;
-the Garmin Connect hop is separate and not inspectable from here. Don't tell the athlete a
-session is "on the watch" — say it's on the calendar and syncing.
+**`--status` is not proof the workout is correct.** It lists event *names*, and a name says
+nothing about whether the steps carry the targets you wrote. **intervals.icu silently drops a
+target it cannot parse** — the step is accepted as a bare duration, the push reports success,
+and the linter is no help because it only checks the text against its own regex. This is not
+hypothetical: on 2026-08-23 a whole HR-prescribed threshold session pushed "successfully" with
+all three key reps carrying **no target at all**, and the athlete caught it, not the coach.
+
+So whenever a week uses **step syntax that is new to this repo**, read the event back from the
+API and inspect `workout_doc.steps` before telling the athlete it is done:
+
+```bash
+python3 - <<'PY'
+import os, json, requests
+from dotenv import load_dotenv; load_dotenv(".env")
+aid=os.getenv("INTERVALS_ATHLETE_ID"); auth=("API_KEY",os.getenv("INTERVALS_API_KEY"))
+evs=requests.get(f"https://intervals.icu/api/v1/athlete/{aid}/events",
+    params={"oldest":"<mon>","newest":"<sun>"}, auth=auth, timeout=30).json()
+for e in sorted([x for x in evs if x.get("category")=="WORKOUT"], key=lambda x:x["start_date_local"]):
+    print(e["start_date_local"][:10], e["name"])
+    for s in (e.get("workout_doc") or {}).get("steps", []):
+        print("   ", json.dumps({k:v for k,v in s.items() if k!="duration"}))
+PY
+```
+
+A step that should be targeted and comes back as `{}` is the failure. **HR targets in
+particular:** intervals.icu accepts only percentage forms (`94-98% LTHR`) and zone forms —
+absolute bpm is dropped. Use `% LTHR`, not `% HR`: `%HR` anchors on max HR, so the same
+numbers mean a far harder effort. `push_week.py` now errors on the bpm form, but the general
+rule stands — **a clean push is not evidence.**
+
+Separately, none of this proves it reached the *watch*: the Garmin Connect hop is not
+inspectable from here. Don't tell the athlete a session is "on the watch" — say it's on the
+calendar and syncing.
 
 Finish by summarising to the athlete: how the week read, what changed for next week, and why.
 
