@@ -29,6 +29,11 @@ work carries a bare duration, its pace guidance living in the prose) sets it
 per-repo with ROBO_COACH_TARGETS=hard-only in .env, or per-week with
 `targets: hard-only` at the top of the week file.
 
+Descriptions are also length-checked. Garmin echoes the whole description into
+both its Overview and Notes panels and truncates long text, so a watch note is
+kept a short glanceable cue (the reasoning lives in the week's .md): the linter
+warns past ~500 characters and errors past ~800.
+
 Before a real push the script also runs a date guard. It uses THIS machine's
 real date (not the caller's, which can be stale) and refuses to push a week whose
 every workout is already in the past — the failure mode where a late check-in
@@ -90,6 +95,23 @@ EASY_GROUPS = (None, "warmup", "cooldown", "strides", "rest")
 CLAIMS_TARGET = re.compile(
     r"\bPace\b|\bLTHR\b|\bHR\b|\bbpm\b|\bBPM\b|\d:\d{2}\s*(-\s*\d:\d{2})?\s*/(km|mi)"
 )
+
+# --- description length --------------------------------------------------------
+# Garmin renders the WHOLE description twice — once in its "Overview" panel and
+# again under "Notes" — and it truncates the field past roughly a kilobyte,
+# dropping the tail. The tail is where the fuelling schedule and the "if the day
+# goes sideways" priority calls tend to sit, so an over-long note loses the part
+# that matters most. Observed behaviour: a short note (~300 chars) renders in
+# full in both panels; a ~1300-char one is cut off mid-note. The steps still
+# reach the watch correctly either way — this only bites the prose.
+#
+# So a watch note is a short, glanceable execution cue: what to DO, in the
+# moment, at a glance. The reasoning — HR mappings, block context, what locks
+# when — belongs in the week's .md, read at home, not on a wrist mid-run. These
+# bounds enforce that; they are a convention limit, deliberately well under
+# Garmin's own, not a guess at the exact truncation point.
+DESC_WARN = 500   # getting long — trim toward a scannable cue
+DESC_MAX = 800    # too long to read mid-run, and at risk of truncation
 
 
 def lint_description(name, desc, targets_everywhere=False):
@@ -153,6 +175,19 @@ def lint_description(name, desc, targets_everywhere=False):
                 f"{name}: step '{line}' anchors on max HR (%HR) rather than "
                 f"threshold (%LTHR) — the same numbers mean a much harder effort"
             )
+    n = len(desc)
+    if n > DESC_MAX:
+        errors.append(
+            f"{name}: description is {n} chars — over the {DESC_MAX}-char watch-note "
+            f"limit. Garmin shows it twice (Overview + Notes) and truncates the tail, "
+            f"where the fuelling and priority calls live. Keep the note a glanceable "
+            f"cue and move the reasoning to the week's .md."
+        )
+    elif n > DESC_WARN:
+        warnings.append(
+            f"{name}: description is {n} chars — getting long. The watch note should "
+            f"be a scannable cue (~400 or under); put the 'why' in the .md."
+        )
     return errors, warnings
 
 

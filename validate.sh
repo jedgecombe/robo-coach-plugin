@@ -33,8 +33,19 @@ for entry in m["plugins"]:
     assert entry.get("name") and entry.get("source"), "a marketplace plugin entry lacks name/source"
 PY
 
+sec "Version + changelog in lockstep"
+python3 - "$PLUG" <<'PY' && ok "plugin.json version matches top CHANGELOG entry" || no "version/CHANGELOG mismatch"
+import json, re, sys, pathlib
+root = pathlib.Path(sys.argv[1])
+ver = json.load(open(root/".claude-plugin/plugin.json"))["version"]
+cl = (root/"CHANGELOG.md").read_text()
+m = re.search(r"^##\s*\[([0-9]+\.[0-9]+\.[0-9]+)\]", cl, re.M)
+assert m, "no '## [x.y.z]' version heading in CHANGELOG.md"
+assert m.group(1) == ver, f"CHANGELOG top entry {m.group(1)} != plugin.json {ver}"
+PY
+
 sec "Structure (components at root, only plugin.json under .claude-plugin/)"
-must=(".claude-plugin/plugin.json" ".claude-plugin/marketplace.json"
+must=(".claude-plugin/plugin.json" ".claude-plugin/marketplace.json" "CHANGELOG.md" "MAINTAINING.md"
       "skills/check-in/SKILL.md" "commands/setup.md" "commands/update.md"
       "scripts/push_week.py" "scripts/check_privacy.py"
       "templates/CLAUDE.md" "templates/PLAN.example.md" "templates/athlete.example.md"

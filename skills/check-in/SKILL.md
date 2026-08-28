@@ -124,6 +124,14 @@ Keep week-by-week churn in the week file — `athlete.md` is durable memory, not
   the source of truth. Copy `weeks/example-week.yaml` for the shape. If the athlete's preference
   (in `athlete.md`) is targets on every run, stamp `targets: all` at the top of the week file so
   the linter accepts easy-run targets; otherwise omit it (the default is `hard-only`).
+- **Keep each `.yaml` description short — a glanceable cue, not the rationale.** Garmin shows
+  the whole description *twice* (its Overview panel and again under Notes) and truncates long
+  text, dropping the tail — which is exactly where the fuelling schedule and the "if the day
+  goes sideways" priority calls sit. So the watch note says what to *do*, in the moment;
+  the "why" (HR mappings, block context, what locks when) is the `.md`'s job and shouldn't be
+  restated on the watch. Don't repeat in prose what the steps already carry (distances, paces,
+  rep structure). `push_week.py` warns past ~500 chars and errors past ~800; aim well under —
+  the notes that render cleanly on the watch sit around 300–450.
 
 ## Step 7 — validate, push, and verify it landed
 
