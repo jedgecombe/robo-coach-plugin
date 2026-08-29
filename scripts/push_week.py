@@ -130,6 +130,18 @@ def lint_description(name, desc, targets_everywhere=False):
     """
     errors, warnings = [], []
     group = None
+    # A description that LEADS with a bare "Main" header is silently broken: intervals.icu
+    # mis-parses the lone "Main" into workout_doc.description, and Garmin then drops the WHOLE
+    # note (confirmed 2026-08-29 — the note vanished entirely rather than truncating, which is
+    # what made it look like a length problem). Lead with a step or a "Warmup" block instead;
+    # keep the targeted efforts under "Main" after that. A "Warmup"/…/"Main" order parses clean.
+    first_line = next((l.strip() for l in desc.splitlines() if l.strip()), "")
+    if first_line.lower().rstrip(":") == "main":
+        errors.append(
+            f"{name}: description leads with a bare 'Main' header — intervals.icu mis-parses it "
+            f"and Garmin drops the entire note. Lead with a step (e.g. the easy portion) or a "
+            f"'Warmup' block, and keep the targeted efforts under 'Main' after it."
+        )
     for raw in desc.splitlines():
         line = raw.strip()
         if not line:

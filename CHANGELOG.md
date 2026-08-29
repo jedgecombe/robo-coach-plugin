@@ -6,6 +6,15 @@ All notable changes to the robo-coach plugin. This project follows
 `/robo-coach:update` in your training repo to re-vendor the scripts and
 templates.
 
+## [0.1.3] — 2026-08-29
+
+### Fixed
+- **Reject descriptions that lead with a bare `Main` header.** intervals.icu mis-parses a
+  leading `Main` into `workout_doc.description`, and Garmin then drops the *entire* note — it
+  vanishes rather than truncating, which disguises it as a length problem. The linter now
+  errors and points at the fix: lead with a step or a `Warmup` block, keeping the targeted
+  efforts under `Main` after it. (Confirmed end-to-end against a live Garmin, 2026-08-29.)
+
 ## [0.1.2] — 2026-08-28
 
 ### Added

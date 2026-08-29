@@ -132,6 +132,10 @@ Keep week-by-week churn in the week file — `athlete.md` is durable memory, not
   restated on the watch. Don't repeat in prose what the steps already carry (distances, paces,
   rep structure). `push_week.py` warns past ~500 chars and errors past ~800; aim well under —
   the notes that render cleanly on the watch sit around 300–450.
+- **Never lead a description with a bare `Main` header.** intervals.icu mis-parses a leading
+  `Main` into the workout doc and Garmin drops the *whole* note (it vanishes, not truncates).
+  Lead with a step — e.g. the easy portion, `- 22km` — or a `Warmup` block, and put the
+  targeted efforts under `Main` after that. `push_week.py` errors on it.
 
 ## Step 7 — validate, push, and verify it landed
 
