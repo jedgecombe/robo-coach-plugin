@@ -119,11 +119,20 @@ Keep week-by-week churn in the week file — `athlete.md` is durable memory, not
   that only gets prescribed in October is worthless. At the review, log **what was actually
   taken and how it sat** into `athlete.md`'s fuelling-tolerance item — that's the only way the
   picture gets built before the products have to be locked at W38.
-- **Step targets: don't re-derive the convention — `push_week.py` enforces it** (pace ranges
-  on hard efforts only; easy work carries bare duration). Just write the steps; the linter is
-  the source of truth. Copy `weeks/example-week.yaml` for the shape. If the athlete's preference
-  (in `athlete.md`) is targets on every run, stamp `targets: all` at the top of the week file so
-  the linter accepts easy-run targets; otherwise omit it (the default is `hard-only`).
+- **Step targets: don't re-derive the convention — `push_week.py` enforces it.** Just write the
+  steps; the linter is the source of truth. Copy `weeks/example-week.yaml` for the shape. The
+  default is `all`: pace/HR targets are accepted on every step, so a week that wants them
+  everywhere needs no stamp. If the athlete's preference (in `athlete.md`) is the stricter
+  "targets on hard efforts only" — easy work carrying a bare duration, its pace guidance living
+  in the prose — stamp `targets: hard-only` at the top of the week file, or set
+  `ROBO_COACH_TARGETS=hard-only` in `.env` to make it the durable per-repo setting.
+- **Flag every recovery and rest step with `intensity=`.** Without it, every step outside a
+  `Warmup`/`Cooldown` block reaches the watch as a plain work step — the 90-second jog between
+  reps shows on the Garmin as "Run", indistinguishable from the rep before it. Append
+  `intensity=recovery` to recovery jogs and stride walk-backs, `intensity=rest` to standing
+  rests, and `intensity=interval` to the hard efforts. `push_week.py` rejects a value
+  intervals.icu doesn't accept — it silently drops unrecognised ones — and warns when a step
+  labelled "recovery" carries no flag.
 - **Keep each `.yaml` description short — a glanceable cue, not the rationale.** Garmin shows
   the whole description *twice* (its Overview panel and again under Notes) and truncates long
   text, dropping the tail — which is exactly where the fuelling schedule and the "if the day

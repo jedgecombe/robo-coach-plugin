@@ -6,6 +6,31 @@ All notable changes to the robo-coach plugin. This project follows
 `/robo-coach:update` in your training repo to re-vendor the scripts and
 templates.
 
+## [0.1.4] — 2026-09-01
+
+### Fixed
+- **Recovery steps now reach the watch as recovery.** intervals.icu passes Garmin's step
+  intensity through only from an explicit `intensity=<value>` token, and the plugin never
+  emitted one — so every step outside a `Warmup`/`Cooldown` block arrived on the watch as a
+  plain work step, and the jog between reps was labelled "Run" exactly like the rep before
+  it. The example week, the `check-in` skill and the training-repo `CLAUDE.md` now flag
+  recovery jogs and stride walk-backs `intensity=recovery`, standing rests
+  `intensity=rest`, and hard efforts `intensity=interval`.
+- **The `check-in` skill stated the wrong default for step targets.** It told the coach the
+  default was `hard-only` and to stamp `targets: all` for targets on every step — the inverse
+  of `push_week.py`, which defaults to `all` and takes `hard-only` as the opt-in. A coach
+  following the skill would have omitted the only stamp that changes anything, and silently
+  got the permissive mode while believing the strict one was in force.
+
+### Added
+- **`intensity=` validation in `push_week.py`.** An unrecognised value (`intensity=recover`)
+  and a spaced form (`intensity = recovery`) are both silently dropped by intervals.icu —
+  the same failure class as absolute-bpm targets — so both are now errors. A step whose
+  label reads "recovery"/"rest" but carries no flag raises a warning. Under
+  `targets: hard-only`, a step flagged `intensity=recovery`/`rest` is held to the easy-step
+  rule wherever it sits, not just inside an easy group. (Verified against the live
+  intervals.icu API, 2026-09-01.)
+
 ## [0.1.3] — 2026-08-29
 
 ### Fixed

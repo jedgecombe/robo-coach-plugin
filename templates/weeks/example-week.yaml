@@ -1,6 +1,8 @@
 # Example file — real weeks (weeks/20*) are gitignored.
 # Step-target convention (pace ranges on hard efforts only; easy work carries a
 # bare duration) is enforced by push_week.py — see its docstring. Don't restate it.
+# Recovery jogs and standing rests need an explicit `intensity=` flag; without one
+# Garmin shows them as plain work steps ("Run"). push_week.py checks the value.
 week: YYYY-Wnn
 # targets: hard-only   # optional per-week override — targets on hard efforts only
 #                      # (default is 'all': pace/HR shown on every step)
@@ -13,7 +15,7 @@ workouts:
 
       Strides 4x
       - 20s
-      - 60s
+      - 60s intensity=recovery
 
       Easy ~5:10-5:40/km, then 4 strides at the end — relaxed-fast, tall
       posture, quick feet, walk/jog the 60s back. Not sprints.
@@ -26,8 +28,8 @@ workouts:
       - 2km
 
       Main 6x
-      - 2m 4:05-4:15/km Pace
-      - 90s
+      - 2m 4:05-4:15/km Pace intensity=interval
+      - 90s intensity=recovery
 
       Cooldown
       - 2km

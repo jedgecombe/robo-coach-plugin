@@ -29,6 +29,13 @@ work carries a bare duration, its pace guidance living in the prose) sets it
 per-repo with ROBO_COACH_TARGETS=hard-only in .env, or per-week with
 `targets: hard-only` at the top of the week file.
 
+Steps also take an optional `intensity=<value>` attribute. It is the only way to tell
+Garmin that a step is a recovery jog or a standing rest rather than work: without it
+every step outside a Warmup/Cooldown block reaches the watch labelled a plain "Run",
+so a 90-second recovery jog is indistinguishable from the rep before it. The linter
+checks the value against what intervals.icu actually accepts, because an unrecognised
+one is silently dropped.
+
 Descriptions are also length-checked. Garmin echoes the whole description into
 both its Overview and Notes panels and truncates long text, so a watch note is
 kept a short glanceable cue (the reasoning lives in the week's .md): the linter
@@ -81,6 +88,26 @@ PACE_TARGET = re.compile(r"^\d:\d{2}(-\d:\d{2})?/(km|mi) Pace(\s.*)?$")
 HR_TARGET = re.compile(r"^\d+(\.\d+)?(-\d+(\.\d+)?)?% ?(LTHR|HR)(\s.*)?$")
 HR_ZONE_REF = re.compile(r"^Z\d+ ?(HR|Pace)(\s.*)?$")
 HR_BPM = re.compile(r"^\d+(-\d+)? ?(HR|bpm|BPM)(\s.*)?$")
+# --- Garmin step intensity ----------------------------------------------------
+# intervals.icu carries the FIT `intensity` field through to Garmin, but ONLY from an
+# explicit `intensity=<value>` token on the step. There is no auto-detection worth
+# relying on: the old automatic rule only marked a step as recovery when it carried a
+# target below a zone threshold, so a bare-duration jog could never qualify. A
+# `Warmup`/`Cooldown` header still sets its own flag; everything else defaults to a
+# plain work step, which the watch shows as "Run".
+#
+# Verified against the live API 2026-09-01. `- 90s intensity=recovery` parses to
+# {"duration": 90, "intensity": "recovery"} with no target present, inside a repeat and
+# ungrouped alike. The value is case-insensitive, but an unrecognised one (`recover`)
+# and a spaced form (`intensity = recovery`) are both SILENTLY DROPPED — the same
+# failure class as absolute bpm targets, so both are errors below.
+INTENSITY = re.compile(r"\bintensity=(\S+)", re.I)
+INTENSITY_WORD = re.compile(r"\bintensity\b", re.I)
+INTENSITIES = ("active", "interval", "recovery", "rest", "warmup", "cooldown", "other")
+# A step whose label says "recovery"/"rest" but carries no flag is the trap this catches:
+# it reads right in the YAML and still arrives on the watch as work.
+RECOVERY_LABEL = re.compile(r"\b(recovery|rest)\b", re.I)
+
 REPEAT_HDR = re.compile(r"^\w[\w /]*\d+x$")
 GROUP_HDRS = ("warmup", "cooldown", "main", "strides", "rest")
 # Groups whose steps are easy by definition, so they must carry a bare duration.
@@ -127,6 +154,9 @@ def lint_description(name, desc, targets_everywhere=False):
     When the athlete's preference is targets-on-every-run (`targets: all` in the
     week file), pass targets_everywhere=True to allow pace/HR targets on easy
     steps too. Malformed targets are still errors either way.
+
+    Also checks each step's optional `intensity=` attribute — the flag that makes a
+    recovery jog show up on the watch as recovery rather than as another work step.
     """
     errors, warnings = [], []
     group = None
@@ -159,6 +189,32 @@ def lint_description(name, desc, targets_everywhere=False):
         if not DURATION.match(dur):
             errors.append(f"{name}: step '{line}' — bad duration/distance '{dur}'")
             continue
+        # `intensity=` is a step attribute, not part of the target — check it and strip
+        # it before the target regexes below ever see it.
+        intensity = None
+        found = INTENSITY.search(rest)
+        if found:
+            intensity = found.group(1).lower()
+            if intensity not in INTENSITIES:
+                errors.append(
+                    f"{name}: step '{line}' — unknown intensity '{found.group(1)}'; "
+                    f"intervals.icu SILENTLY DROPS a value it doesn't recognise and the "
+                    f"step reaches the watch as a plain work step. Use one of: "
+                    f"{', '.join(INTENSITIES)}"
+                )
+            rest = INTENSITY.sub(" ", rest).strip()
+        elif INTENSITY_WORD.search(rest):
+            errors.append(
+                f"{name}: step '{line}' — malformed intensity attribute; write it as "
+                f"'intensity=recovery', with no spaces around the '='. Any other form "
+                f"is silently dropped and the step reaches the watch as work."
+            )
+        elif RECOVERY_LABEL.search(rest):
+            warnings.append(
+                f"{name}: step '{line}' — the label says recovery/rest but the step "
+                f"carries no 'intensity=' attribute, so Garmin shows it as a plain work "
+                f"step. Add 'intensity=recovery' (or 'intensity=rest')."
+            )
         if not CLAIMS_TARGET.search(rest):
             continue
         if HR_BPM.match(rest):
@@ -175,8 +231,9 @@ def lint_description(name, desc, targets_everywhere=False):
             )
         elif not (PACE_TARGET.match(rest) or HR_TARGET.match(rest)):
             errors.append(f"{name}: step '{line}' — malformed target '{rest}'")
-        elif group in EASY_GROUPS and not targets_everywhere:
-            where = group or "easy/ungrouped"
+        elif (group in EASY_GROUPS or intensity in ("recovery", "rest")) and not targets_everywhere:
+            where = ("recovery" if intensity in ("recovery", "rest")
+                     else group or "easy/ungrouped")
             errors.append(
                 f"{name}: {where} step '{line}' carries a pace/HR target — "
                 f"convention is targets on hard efforts only; easy work takes a "
