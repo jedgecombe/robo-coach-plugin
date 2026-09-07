@@ -81,13 +81,26 @@ recovery jog or a standing rest — an unrecognised value is dropped and the ste
 watch as a plain "Run" — so the linter checks that too. If you ever push hand-written step syntax, check the calendar entry
 rather than trusting the "pushed" message.
 
+**Re-pushing an edited week updates it, rather than replacing it.** Each workout goes up with
+a stable `external_id` of its own through intervals.icu's upsert, so a session you edit and
+re-push keeps its calendar event id instead of becoming a new row. That matters to anything
+reading the calendar back: a reader spots a removed session by re-reading a window of dates and
+seeing what doesn't return, a comparison it can't safely make for the newest day in the window —
+so a delete-and-recreate on the day you're editing leaves a phantom event in its copy until the
+next day. Sessions you drop from a week file are removed after the push, and only ever ones this
+script wrote — a hand-made entry on the same day is left alone. `--wipe` widens that clean-up
+to entries this script didn't write, on the days the file names; it's for clearing out legacy
+events. Every delete now happens *after* the write has landed, so a push that fails leaves the
+calendar exactly as it was.
+
 **Every workout also carries a role.** A one-word `role:` in the week file — `key`, `long`,
 `easy`, `recovery`, `social`, `race`, `tune_up`, `strength`, `rest` or `other` — is pushed as a
 `nocoach:<role>` tag on the calendar event. It's the only thing recording what a session was
 *for*, because the workout name is free text and the distance says nothing (one runner's long
 run is another's easy run), so nothing reading the week back can infer it. Without it a week
 doesn't read as unlabelled, it reads wrong: no key-session count, no way to tell recovered legs
-the morning after a hard day, and a race the taper rules can't see. `push_week.py` warns when a
+the morning after a hard day, a race just run left undetected, and a mid-week re-plan that
+under-counts the quality already done and so permits more of it. `push_week.py` warns when a
 workout has none and pushes it untagged — an honest unknown beats the wrong number you'd get
 by defaulting it — and rejects near-misses like `Long` or `tune-up`, which would read as no
 role while looking labelled. `--status` reads the tags back off the calendar so you can check

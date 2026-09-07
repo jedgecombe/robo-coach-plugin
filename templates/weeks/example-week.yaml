@@ -15,8 +15,10 @@
 # event, and it is the only record of what the session was FOR — the name is free text
 # and distance says nothing (one athlete's long run is another's easy run), so nothing
 # downstream can infer it. Without it the week's key count reads as unknown, the day
-# after a hard session can't be told from recovered legs, and a race is invisible to the
-# taper rules. push_week.py warns on a missing one and pushes that workout untagged, so
+# after a hard session can't be told from recovered legs, a race just run goes undetected,
+# and a mid-week re-plan under-counts the quality already done — the one case where a
+# missing tag makes a rule more permissive rather than merely less sure.
+# push_week.py warns on a missing one and pushes that workout untagged, so
 # the week reads back as "we don't know" rather than as a wrong number; a MISSPELT one is
 # an error, because it reads downstream as no role while looking labelled. The ten, exactly
 # as written (lowercase; note the underscore in tune_up):
@@ -25,7 +27,8 @@
 #   easy      the one role the reference-band instrument reads, on recovered legs
 #   recovery  like easy, but the band instrument is suppressed: legs not recovered
 #   social    club/group run — stoppage ignored, pace not read, volume still counts
-#   race      the goal race — no compliance verdict; taper and post-race key off it
+#   race      the goal race — no compliance verdict; flags a race just run (the taper
+#             itself needs no tag; it fires off the goal date)
 #   tune_up   a race that's a data point — quality stays three days clear of it
 #   strength  non-running — an entry with no session
 #   rest      a written rest day, zero steps, so the rest rule is checkable

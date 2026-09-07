@@ -32,12 +32,22 @@ See `README.md` for the human overview of the system.
   `intensity=interval` on the hard efforts. Without one, everything outside a
   `Warmup`/`Cooldown` block reaches the watch as a plain work step labelled "Run".
   `push_week.py` validates the value; intervals.icu silently drops one it doesn't recognise.
+- **A re-push updates the calendar in place; it does not replace it.** Each workout is
+  written with a stable `external_id` of ours (`robo-coach:<date>:<n>`) through the
+  provider's upsert, so an edited session keeps its event id. Anything mirroring this
+  calendar detects a removal by re-reading a window of dates and can't trust that
+  comparison on the newest day, so a delete-and-recreate on the day of an edit leaves a
+  phantom event in the copy until tomorrow. Re-push plainly to edit a week. `--wipe` adds
+  a clean-up of entries this script didn't write, on the days the file names — for legacy
+  events. Deletes run only after the write lands, so a failed push changes nothing.
 - **Every workout carries a `role:`**, pushed as a `nocoach:<role>` tag on the calendar
   event. It is the only record of what a session was *for*: the name is free text and
   distance says nothing, so nothing reading the week back can infer it, and an untagged
   week reads as a claim about the athlete rather than about our labelling — unknown key
-  count, no way to tell recovered legs the morning after a hard day, races invisible to
-  the taper rules. One of `key`, `long`, `easy`, `recovery`, `social`, `race`, `tune_up`,
+  count, no way to tell recovered legs the morning after a hard day, a race just run left
+  undetected, and a mid-week re-plan that under-counts the quality already done and so
+  allows more of it. (The taper is not affected — it fires off the goal date, not a tag.)
+  One of `key`, `long`, `easy`, `recovery`, `social`, `race`, `tune_up`,
   `strength`, `rest`, `other` — matched exactly, lowercase, `tune_up` underscored.
   `push_week.py` warns on a missing one and pushes that workout untagged — unknown beats
   a wrong number, which is what defaulting it to `other` would produce — and errors on a

@@ -15,9 +15,10 @@ Usage:
     python scripts/push_week.py weeks/2026-W30.yaml --status   # what's on the calendar
 
 --dry-run     validate + print payloads, send nothing (no .env needed)
---wipe        delete existing workouts on the dates this file covers, then re-push
-              (makes re-pushing an edited week idempotent). Only touches the dates
-              present in the file, so a manual entry on an off day is left alone.
+--wipe        after a successful push, also delete workouts on these dates that this
+              script did not write — legacy or hand-made entries. Rarely needed now
+              that a plain re-push updates in place (see below). The deletes happen
+              AFTER the write lands, so a failed push leaves the calendar untouched.
 --status      list the workouts currently on the intervals.icu calendar for this
               file's dates, with the role tag read back off each one, then exit —
               use it to confirm a push landed and kept its roles.
@@ -55,11 +56,30 @@ session was FOR. Nothing downstream infers it: not from the name, which is free 
 and not from the distance, because one athlete's long run is another's easy run. So an
 event pushed without one has no role at all, and a week of them reads as a claim about
 the athlete rather than about our labelling — the key count goes unknown, the morning
-after a threshold can't be told from recovered legs, and a race in the window is
-invisible to the taper rules. A workout without one is pushed untagged, with a
+after a threshold can't be told from recovered legs, a race just run goes undetected by
+the rules that read the week behind (the taper is NOT one of them: it fires off the goal
+date, not off any tag), and a mid-week re-plan under-counts the quality already run,
+which is the one place a missing tag makes a rule more permissive rather than less sure. A workout without one is pushed untagged, with a
 warning — the week then reads back as "we don't know" rather than as a wrong number.
 A MISSPELT one is an error, because it reads downstream as no role while looking
 labelled. Read the tags back off the calendar with --status.
+
+Re-pushing an edited week UPDATES the events already on the calendar rather than
+replacing them. Each workout is written with a stable `external_id` of our own —
+`robo-coach:<date>:<n>` — through intervals.icu's `events/bulk?upsert=true`, so the
+same slot pushed twice lands on the same row and keeps its provider event id. That
+matters to anything mirroring the calendar: a reader notices a removed event by asking
+for a window of dates and seeing what does not come back, so a delete-and-recreate on
+the day of a check-in leaves the dead event in its copy, unlabelled, until the next
+day — long enough to make a fully tagged week read as though it holds an untagged
+session. Sessions the week file no longer describes are removed afterwards, and only
+ever OURS: an event without our `external_id` prefix is left alone, so a hand-made
+entry or another system's session on the same calendar survives a push.
+
+Note the two namespaces are different and both matter. The `nocoach:` tag namespace is
+the READER's, and we write into it because that is what it reads. The `robo-coach:`
+external_id namespace is OURS, and must stay ours — two writers sharing an external_id
+prefix would silently overwrite each other's sessions.
 
 Before a real push the script also runs a date guard. It uses THIS machine's
 real date (not the caller's, which can be stale) and refuses to push a week whose
@@ -264,11 +284,15 @@ def lint_name(name):
 #   easy      the reference-band instrument reads here, on recovered legs only
 #   recovery  like easy, but the band instrument is suppressed: legs not recovered
 #   social    stoppage ignored and pace not read; volume still counts
-#   race      the goal race; no compliance verdict; taper and post-race key off it
+#   race      the goal race; no compliance verdict; detects a race just run, which is
+#             what the post-race week rule reads (the taper needs no tag — goal date)
 #   tune_up   a race that is a data point; quality stays three days clear of it
 #   strength  non-running; an entry with no session
 #   rest      a written rest day, zero steps, so the rest rule is checkable
 #   other     a run with no role-scoped rule
+# Verified against the live account 2026-09-07: a `tags` array on a single-event POST is
+# accepted and persists — the tag shows on the intervals.icu calendar entry, and reaches
+# neither the description nor the watch. (The bulk upsert path below is the same field.)
 ROLE_TAG = "nocoach:"
 ROLES = (
     "key", "long", "easy", "recovery", "social",
@@ -383,6 +407,46 @@ def role_of(ev):
     if len(found) > 1:
         return "AMBIGUOUS(" + ",".join(found) + ")"
     return found[0]
+
+
+# --- event identity ------------------------------------------------------------
+# Every event we write carries an `external_id` of ours, and we push through
+# `events/bulk?upsert=true`, where a repeated external_id UPDATES the event instead of
+# adding another. The point is that a session keeps its provider event id across a
+# rewrite. A delete-and-recreate mints a new id, and anything mirroring this calendar
+# detects a removal by asking for a window of dates and seeing what fails to come back —
+# a comparison that cannot safely be made on the newest day of the window, because the
+# provider's date bounds are the thing being trusted. So a session replaced TODAY leaves
+# its predecessor in the mirror until tomorrow, and check-in day is exactly that day: the
+# week then reads as holding an unlabelled session it does not hold, and where a day has
+# more than one event the dead one can take over the role of the live one.
+#
+# The id is `robo-coach:<date>:<n>`, n counting workouts within that date from 1 in file
+# order. Stable across an edit to a session's name, steps or role — which is the case that
+# matters, since that is what a re-push after a mid-week change actually does. Reordering
+# two sessions on the SAME day swaps their ids and so rewrites both; harmless, and rarer
+# than the case this buys.
+#
+# The prefix must stay ours. `nocoach:` is the reader's tag namespace and we write into it
+# deliberately; external_id is a different namespace, and two systems sharing a prefix
+# there would each silently overwrite the other's sessions.
+EXT_PREFIX = "robo-coach:"
+
+
+def with_external_ids(workouts):
+    """A stable external_id per workout, in file order."""
+    seen = {}
+    ids = []
+    for w in workouts:
+        day = str(w["date"])
+        seen[day] = seen.get(day, 0) + 1
+        ids.append(f"{EXT_PREFIX}{day}:{seen[day]}")
+    return ids
+
+
+def is_ours(ev):
+    """Whether we wrote this event. Anything else on the calendar is left alone."""
+    return str(ev.get("external_id") or "").startswith(EXT_PREFIX)
 
 
 # --- description length --------------------------------------------------------
@@ -590,52 +654,141 @@ def date_guard(week_field, dates, allow_past, enforce):
               f"re-push; double-check your date if you meant to push a fresh week.")
 
 
-def wipe(creds, aid, dates):
-    """Delete planned workouts on exactly the dates this file covers, so a
-    re-push is idempotent without disturbing manual entries on other days."""
+def fetch_workouts(creds, aid, dates, span=False):
+    """Planned workouts already on the calendar for this file's dates.
+
+    The API takes a date range, and by default the result is filtered back down to the
+    file's own days — so a manual entry on an off day inside the week is invisible here
+    and cannot be touched. Pass span=True to keep everything between the first and last
+    date instead, which is what finding a dropped session needs: a day removed from the
+    week file is no longer one of its dates, so the orphan left on it would otherwise
+    never be looked at.
+    """
     dset = set(dates)
+    first, last = min(dates), max(dates)
     r = requests.get(
         f"{BASE}/athlete/{aid}/events",
-        params={"oldest": min(dates), "newest": max(dates)},
+        params={"oldest": first, "newest": last},
         auth=creds,
         timeout=30,
     )
     check(r)
-    for ev in r.json():
-        if ev.get("category") == "WORKOUT" and str(ev.get("start_date_local", ""))[:10] in dset:
-            d = requests.delete(f"{BASE}/athlete/{aid}/events/{ev['id']}", auth=creds, timeout=30)
-            check(d)
-            print(f"  wiped {str(ev.get('start_date_local', ''))[:10]}  {ev.get('name')}")
+    # Filter on the dates we got back rather than trusting the query bounds. Whether the
+    # provider treats oldest/newest as inclusive, and whether it selects on local time or
+    # UTC, is not something this script has established — and one of the two callers here
+    # DELETES what this returns. A day either side is the difference between removing a
+    # dropped session and removing last week's.
+    def keeps(ev):
+        day = str(ev.get("start_date_local", ""))[:10]
+        return first <= day <= last if span else day in dset
+    return [ev for ev in r.json() if ev.get("category") == "WORKOUT" and keeps(ev)]
+
+
+def delete_event(creds, aid, ev, verb):
+    d = requests.delete(f"{BASE}/athlete/{aid}/events/{ev['id']}", auth=creds, timeout=30)
+    check(d)
+    print(f"  {verb} {str(ev.get('start_date_local', ''))[:10]}  {ev.get('name')}")
+
+
+def reconcile(creds, aid, dates, keep, wipe_foreign=False):
+    """Remove what the week file no longer describes. Runs AFTER the push has succeeded,
+    never before: a delete that happens first is a delete that has already happened when
+    the write turns out to fail.
+
+    By default only OUR events are removed — a session dropped from an edited week.
+    An event without our external_id prefix is not ours to delete: it is a hand-made
+    entry, or another system writing to the same calendar. `wipe_foreign` (--wipe) takes
+    those too.
+
+    Two different windows, deliberately. Our own events are reconciled across the whole
+    span between the file's first and last date, so a session dropped from a day in the
+    middle is caught. Foreign events are only touched on the days the file actually
+    names, which preserves --wipe's old promise that a manual entry on an off day is
+    left alone. The span still stops at the file's own dates rather than widening to the
+    ISO week, because a mid-week re-plan legitimately covers only the days still to
+    come and widening it would delete the completed days. The cost is that a session
+    dropped from the very START or END of a week falls outside the new span and
+    survives; that shows in --status, and leaving an event is the right way to be wrong.
+    """
+    dset = set(dates)
+    for ev in fetch_workouts(creds, aid, dates, span=True):
+        if ev.get("external_id") in keep:
+            continue
+        if is_ours(ev):
+            delete_event(creds, aid, ev, "removed (no longer in the week file)")
+        elif wipe_foreign and str(ev.get("start_date_local", ""))[:10] in dset:
+            delete_event(creds, aid, ev, "wiped (not written by this script)")
 
 
 def show_status(creds, aid, dates):
-    """List the workouts currently on the intervals.icu calendar for these dates,
-    so a push can be verified as landed rather than assumed."""
-    dset = set(dates)
-    r = requests.get(
-        f"{BASE}/athlete/{aid}/events",
-        params={"oldest": min(dates), "newest": max(dates)},
-        auth=creds,
-        timeout=30,
-    )
-    check(r)
-    rows = [
-        ev for ev in r.json()
-        if ev.get("category") == "WORKOUT" and str(ev.get("start_date_local", ""))[:10] in dset
-    ]
+    """List the workouts currently on the intervals.icu calendar for these dates, with
+    the role tag and provider event id of each, so a push can be verified as landed
+    rather than assumed. The id is the check that a re-push UPDATED a session rather
+    than replacing it: one session, one id, however many times it is edited.
+    A `~` marks an event we did not write, which a push will leave alone. The listing
+    covers the whole span between the first and last date, not just the days the file
+    names, so a session left behind on a day dropped from the week shows up here."""
+    rows = fetch_workouts(creds, aid, dates, span=True)
     if not rows:
         print("No workouts on the calendar for these dates.")
         return
     print(f"On the intervals.icu calendar ({min(dates)} … {max(dates)}):")
-    untagged = 0
+    untagged = foreign = 0
     for ev in sorted(rows, key=lambda e: str(e.get("start_date_local", ""))):
         role = role_of(ev)
         untagged += role == NO_ROLE
-        print(f"  {str(ev.get('start_date_local', ''))[:10]}  {role:<{ROLE_COL}}  {ev.get('name')}")
+        mine = is_ours(ev)
+        foreign += not mine
+        print(f"  {str(ev.get('start_date_local', ''))[:10]} {' ' if mine else '~'} "
+              f"{role:<{ROLE_COL}}  id={str(ev.get('id')):<10}  {ev.get('name')}")
     if untagged:
         print(f"\n  warning: {untagged} of these carry no {ROLE_TAG}… role tag, so nothing "
-              f"downstream knows what those sessions were for. Re-push the week with "
-              f"--wipe to replace them with tagged events.")
+              f"downstream knows what those sessions were for. Re-pushing the week tags "
+              f"the ones we wrote; anything marked ~ has to be fixed where it came from.")
+    if foreign:
+        was = "was" if foreign == 1 else "were"
+        print(f"\n  note: {foreign} marked ~ {was} not written by this script (no "
+              f"{EXT_PREFIX}… external_id). A push leaves them alone; --wipe deletes them.")
+
+
+def push(creds, aid, workouts, dates, wipe_foreign=False):
+    """Write the week, updating in place. Every event carries our external_id and goes
+    through the bulk endpoint with upsert=true, so a session pushed twice lands on the
+    same row and keeps its provider event id instead of being replaced by a new one."""
+    ext_ids = with_external_ids(workouts)
+    payload = [
+        {
+            "category": "WORKOUT",
+            "type": w.get("type", "Run"),
+            "start_date_local": f"{w['date']}T00:00:00",
+            "name": w["name"],
+            "description": w.get("description", ""),
+            "tags": event_tags(w),
+            "external_id": x,
+        }
+        for w, x in zip(workouts, ext_ids)
+    ]
+    # upsert=true is what makes a re-push an update: the provider matches on external_id
+    # and rewrites that row instead of adding another, so the event id survives.
+    r = requests.post(f"{BASE}/athlete/{aid}/events/bulk", params={"upsert": "true"},
+                      json=payload, auth=creds, timeout=60)
+    check(r)
+
+    # Report the id the provider came back with, since "one session, one id across a
+    # rewrite" is the whole point and is worth being able to see rather than assume.
+    try:
+        returned = {ev["external_id"]: ev.get("id") for ev in r.json()
+                    if isinstance(ev, dict) and ev.get("external_id")}
+    except (ValueError, TypeError, AttributeError):
+        returned = {}
+    for w, x in zip(workouts, ext_ids):
+        got = returned.get(x)
+        seen = f"   id={got}" if got is not None else ""
+        print(f"pushed {str(w['date'])}  {role_cell(w)}  {name_line(w['name'])}{seen}")
+    if not returned:
+        print("  note: the bulk response carried no event ids to show — check --status.")
+
+    reconcile(creds, aid, dates, set(ext_ids), wipe_foreign)
 
 
 def main():
@@ -644,7 +797,10 @@ def main():
     )
     ap.add_argument("week_file", help="e.g. weeks/2026-W30.yaml")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--wipe", action="store_true")
+    ap.add_argument("--wipe", action="store_true",
+                    help="after the push, also delete workouts on these dates that this "
+                         "script did not write (legacy or hand-made entries). A plain "
+                         "re-push already updates ours in place, so this is rarely needed")
     ap.add_argument("--status", action="store_true", help="list calendar workouts for these dates, then exit")
     ap.add_argument("--allow-past", action="store_true", help="override the past-week guard (backfills only)")
     args = ap.parse_args()
@@ -689,32 +845,19 @@ def main():
 
     if args.dry_run:
         date_guard(data.get("week"), dates, args.allow_past, enforce=False)
-        for w in workouts:
+        for w, ext in zip(workouts, with_external_ids(workouts)):
             tags = event_tags(w)
             extra = f"   tags: {', '.join(tags[1:])}" if len(tags) > 1 else ""
             print(f"[dry-run] {str(w['date'])}  {role_cell(w)}  "
                   f"{name_line(w['name'])}{extra}")
+            print(f"  external_id: {ext} (a re-push updates this event, keeping its id)")
             print("  " + w.get("description", "").replace("\n", "\n  ").rstrip())
         return
 
     creds, aid = get_auth()
     date_guard(data.get("week"), dates, args.allow_past, enforce=True)
 
-    if args.wipe:
-        wipe(creds, aid, dates)
-
-    for w in workouts:
-        payload = {
-            "category": "WORKOUT",
-            "type": w.get("type", "Run"),
-            "start_date_local": f"{w['date']}T00:00:00",
-            "name": w["name"],
-            "description": w.get("description", ""),
-            "tags": event_tags(w),
-        }
-        r = requests.post(f"{BASE}/athlete/{aid}/events", json=payload, auth=creds, timeout=30)
-        check(r)
-        print(f"pushed {str(w['date'])}  {role_cell(w)}  {name_line(w['name'])}")
+    push(creds, aid, workouts, dates, wipe_foreign=args.wipe)
 
     print(f"\nDone — {len(workouts)} workouts on intervals.icu; Garmin Connect picks them up shortly.")
 

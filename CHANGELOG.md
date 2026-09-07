@@ -6,6 +6,49 @@ All notable changes to the robo-coach plugin. This project follows
 `/robo-coach:update` in your training repo to re-vendor the scripts and
 templates.
 
+## [0.1.7] — 2026-09-07
+
+### Changed
+- **A re-push now updates the calendar in place instead of replacing it.** Every workout is
+  written with a stable `external_id` of ours — `robo-coach:<date>:<n>` — through
+  intervals.icu's `events/bulk?upsert=true`, so a session pushed twice lands on the same row
+  and keeps its provider event id. Previously `--wipe` deleted the day's events and the push
+  created new ones, minting a new id on every edit. That is invisible on the calendar and not
+  invisible to anything mirroring it: a reader detects a removed session by re-reading a
+  window of dates and seeing what doesn't come back, and cannot safely make that comparison
+  for the newest day in the window. So a session replaced *today* left its predecessor in the
+  mirror as a phantom until tomorrow — and today is check-in day, which is how a fully tagged
+  week could read as holding an unlabelled session it did not hold.
+- **Sessions dropped from a week file are removed after the push**, and only ever ones this
+  script wrote. An event without our `external_id` prefix is never deleted, so a hand-made
+  entry or another system's session on the same calendar survives a push — which the old
+  `--wipe` did not respect. The reconciliation spans only the file's own first-to-last date,
+  so a mid-week re-plan covering the days still to come leaves the completed days alone.
+- **`--wipe` is now a clean-up that runs after the push, not a delete that runs before it.**
+  It removes workouts on the days the file names that this script did not write — legacy or
+  hand-made entries — and no longer destroys our own events' ids on the way, because the
+  upsert has already updated them. Ordering it after the write also closes a failure window:
+  the old flow deleted first, so a push that then failed left the days empty. A failed push
+  now leaves the calendar exactly as it was. The `check-in` skill's mid-week-edit step no
+  longer reaches for the flag at all.
+- **The `nocoach:` tag is confirmed to land**, verified on the live calendar 2026-09-07 —
+  0.1.6 shipped with that unverified. Recorded in `push_week.py` beside the tag constant.
+- **`--status` shows each event's provider id** and marks with `~` anything this script didn't
+  write. One session keeping one id across repeated edits is the check that the upsert is
+  doing its job. It also now lists the whole span between the first and last date rather than
+  only the days the file names, so a session left behind on a dropped day is visible.
+
+### Fixed
+- **Corrects a claim made in 0.1.6:** a missing `role:` does *not* affect the taper, which
+  fires off the goal date in the athlete's record and needs no tag at all. What the `race` and
+  `tune_up` tags actually drive is the detection of a race *completed* in the last seven days,
+  which the post-race rules read. The docs said "invisible to the taper rules" throughout;
+  they now say what the tags really do.
+- **Documents a consequence 0.1.6 missed:** a mid-week re-plan counts the quality already run
+  off these same tags, so an untagged week reads as holding none and the race and post-race
+  rules then permit more quality than they should. It is the one case where a missing tag
+  makes a rule more permissive rather than merely less certain.
+
 ## [0.1.6] — 2026-09-07
 
 ### Added

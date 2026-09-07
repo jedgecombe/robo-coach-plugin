@@ -138,8 +138,10 @@ Keep week-by-week churn in the week file — `athlete.md` is durable memory, not
   distance says nothing (one athlete's long run is another's easy run), so nothing reading the
   week back can infer it. An untagged week doesn't read as "unlabelled", it reads as a claim
   about the athlete: the key count comes back unknown, the morning after a threshold can't be
-  told from recovered legs, and a race in the window is invisible to the taper and post-race
-  rules. The ten, exactly as written (lowercase, and `tune_up` has an underscore): `key`,
+  told from recovered legs, and a race just run goes undetected by the rules that read the
+  week behind. It also matters **mid-week**: a re-plan counts the quality already run off
+  these tags, so an untagged week reads as holding none and the rules then allow more — the
+  one case where a missing tag makes a rule more permissive rather than merely less sure. The ten, exactly as written (lowercase, and `tune_up` has an underscore): `key`,
   `long`, `easy`, `recovery`, `social`, `race`, `tune_up`, `strength`, `rest`, `other`. Pick
   the one that matches what the session is *for*, not what it looks like — a club night is
   `social` (its stoppage and pace are not read), a parkrun used as a data point is `tune_up`,
@@ -196,7 +198,7 @@ so uv resolves them with no virtualenv or install step:
 
 ```bash
 uv run scripts/push_week.py weeks/<next-week>.yaml --dry-run   # validate + preview (+ date guard)
-uv run scripts/push_week.py weeks/<next-week>.yaml             # push (add --wipe to re-push an edited week)
+uv run scripts/push_week.py weeks/<next-week>.yaml             # push (re-push to update in place)
 uv run scripts/push_week.py weeks/<next-week>.yaml --status    # confirm they're on the calendar, with roles
 ```
 
@@ -244,7 +246,21 @@ Finish by summarising to the athlete: how the week read, what changed for next w
 
 Not every session is the full loop. "Calf is tight, rearrange the week" / "swap Thu and Sat"
 → hear the reason, read the current week's files, make the change, keep the two hard days
-spaced and the rules intact, then re-push the affected week with `--wipe` (it only touches
-the dates present in the file, so completed sessions you omit are left alone). The date guard
-will *note* the past days in the current week without blocking — that's expected here. The
-plan is meant to bend.
+spaced and the rules intact, then **re-push the affected week plainly — no `--wipe`.** The
+push updates the events already on the calendar in place, so each session keeps its provider
+event id, and a session you dropped from the file is removed. Completed days you omit from a
+mid-week file are left alone: the reconciliation only spans that file's own first-to-last
+date. The date guard will *note* the past days without blocking — expected here.
+
+**`--wipe` is not needed for an edit.** A plain re-push already updates each session in
+place. What `--wipe` adds is deleting entries on those days that this script didn't write —
+useful for clearing out legacy events, and destructive to anything the athlete added by hand,
+so don't reach for it out of habit. All deletes run after the write has landed, so a failed
+push leaves the calendar untouched.
+
+Why any of this matters on an edit day: anything mirroring this calendar spots a deletion by
+re-reading a window of dates, and can't safely make that comparison for the newest day in the
+window. An event *replaced* today therefore sits in the mirror as a phantom untagged session
+until tomorrow — which is exactly what makes a fully tagged week read as though it holds an
+unlabelled one. Updating in place is what avoids that. The plan is meant to bend; the row
+it's written into isn't.
