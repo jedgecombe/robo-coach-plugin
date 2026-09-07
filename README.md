@@ -129,7 +129,37 @@ chmod +x "$(git rev-parse --git-path hooks)/pre-commit"
 
 python3 scripts/check_privacy.py --all       # audit tree content + history
 python3 scripts/check_privacy.py --history   # history content only ("can I publish this?")
+python3 scripts/check_privacy.py --mode      # which mode is active, and why
 ```
+
+### If your training repo is a private backup instead
+
+Some people would rather keep the athlete data *in* git — a private repo as an off-machine
+backup, with the coaching system living here in the plugin. That inverts the rule above, and
+running the strict checks against it fails on every single commit. **A hook that always fails
+is a hook you learn to bypass**, which is worse than having no hook, so the mode is explicit.
+Declare it in `.privacy-mode` at the repo root:
+
+```
+private-data
+verified-private: https://github.com/you/your-training-repo.git
+```
+
+**No `.privacy-mode` file means `shareable`** — the strict mode is the default, so a repo that
+hasn't declared itself private is guarded as though it were about to be published. The mode is
+never inferred from repo contents; "looks private" is not a security property.
+
+`private-data` turns off the personal-path and marker checks, and turns on the one that matters
+once your data is tracked: **every push remote must be pinned as `verified-private`**. The hook
+has no network and no credentials, so it can't ask GitHub whether your repo is private — a check
+that silently passes when it can't verify is worse than useless. Instead the claim is written
+down and pinned to a URL, so adding a remote, changing `origin`, or copying the config into
+another repo all break the pin and fail the check. Confirm it in the host's UI before writing
+the line.
+
+Secrets are refused in **both** modes. `.env` holds a live intervals.icu API key, and private
+today is not private after a fork, a transfer, or an accidental visibility flip — unlike
+personal prose, a leaked key is exploitable by a stranger.
 
 The marker list lives in `.privacy-markers` (itself gitignored). Anything you commit should
 **describe the system, never the athlete.**
