@@ -20,7 +20,7 @@ anyone's training data.
 |---|---|
 | `check-in` skill | The weekly loop: hear how you are → review the week like a coach → adapt next week → push it to the watch. Also the reference for mid-week re-plans. |
 | `/robo-coach:setup` command | Scaffolds a personal training repo from the templates and wires up privacy protection. |
-| `scripts/push_week.py` | Validates and pushes a week's workouts to intervals.icu. Enforces the step-target convention and guards against pushing a week that's already in the past. |
+| `scripts/push_week.py` | Validates and pushes a week's workouts to intervals.icu. Enforces the step-target and session-role conventions, and guards against pushing a week that's already in the past. |
 | `scripts/check_privacy.py` | Pre-commit hook + auditor: refuses to commit personal data (by path *and* by content). |
 | `templates/` | The shape of every file you own — `CLAUDE.md`, `PLAN.example.md`, `athlete.example.md`, example weeks, `.env.example`, `.gitignore`. |
 
@@ -81,6 +81,18 @@ recovery jog or a standing rest — an unrecognised value is dropped and the ste
 watch as a plain "Run" — so the linter checks that too. If you ever push hand-written step syntax, check the calendar entry
 rather than trusting the "pushed" message.
 
+**Every workout also carries a role.** A one-word `role:` in the week file — `key`, `long`,
+`easy`, `recovery`, `social`, `race`, `tune_up`, `strength`, `rest` or `other` — is pushed as a
+`nocoach:<role>` tag on the calendar event. It's the only thing recording what a session was
+*for*, because the workout name is free text and the distance says nothing (one runner's long
+run is another's easy run), so nothing reading the week back can infer it. Without it a week
+doesn't read as unlabelled, it reads wrong: no key-session count, no way to tell recovered legs
+the morning after a hard day, and a race the taper rules can't see. `push_week.py` warns when a
+workout has none and pushes it untagged — an honest unknown beats the wrong number you'd get
+by defaulting it — and rejects near-misses like `Long` or `tune-up`, which would read as no
+role while looking labelled. `--status` reads the tags back off the calendar so you can check
+they landed.
+
 **And one that's social rather than technical.** The workout *name* is the field other
 people end up seeing: Garmin's "Activity Name" display preference can stamp it onto the
 saved activity, which your Garmin Connect connections see in their feed. So names here are
@@ -111,7 +123,7 @@ Garmin pushes to Strava automatically once the two are linked, so nothing else i
 ```bash
 uv run scripts/push_week.py weeks/YYYY-Www.yaml --dry-run   # validate + preview
 uv run scripts/push_week.py weeks/YYYY-Www.yaml             # push
-uv run scripts/push_week.py weeks/YYYY-Www.yaml --status    # confirm it's on the calendar
+uv run scripts/push_week.py weeks/YYYY-Www.yaml --status    # confirm it landed, with roles
 ```
 
 7. Check one workout renders correct steps in the intervals.icu calendar and appears in Garmin

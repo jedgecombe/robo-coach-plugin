@@ -19,7 +19,8 @@ Usage:
               (makes re-pushing an edited week idempotent). Only touches the dates
               present in the file, so a manual entry on an off day is left alone.
 --status      list the workouts currently on the intervals.icu calendar for this
-              file's dates, then exit — use it to confirm a push landed.
+              file's dates, with the role tag read back off each one, then exit —
+              use it to confirm a push landed and kept its roles.
 --allow-past  override the past-week guard (below); for deliberate backfills only.
 
 Every push is validated first (see lint_description): the intervals.icu step
@@ -47,6 +48,18 @@ activity, which the athlete's connections see. So a name is factual and standard
 "<session type> <structure>", plain ASCII — and the linter enforces that (see
 lint_name). It also prints what a watch will actually show, since the FIT field
 truncates at 15 bytes.
+
+Every workout also carries a `role:` — one of the ten in ROLES — pushed as a
+`nocoach:<role>` tag on the calendar event. That tag is the only thing recording what a
+session was FOR. Nothing downstream infers it: not from the name, which is free text,
+and not from the distance, because one athlete's long run is another's easy run. So an
+event pushed without one has no role at all, and a week of them reads as a claim about
+the athlete rather than about our labelling — the key count goes unknown, the morning
+after a threshold can't be told from recovered legs, and a race in the window is
+invisible to the taper rules. A workout without one is pushed untagged, with a
+warning — the week then reads back as "we don't know" rather than as a wrong number.
+A MISSPELT one is an error, because it reads downstream as no role while looking
+labelled. Read the tags back off the calendar with --status.
 
 Before a real push the script also runs a date guard. It uses THIS machine's
 real date (not the caller's, which can be stale) and refuses to push a week whose
@@ -224,6 +237,154 @@ def lint_name(name):
     return errors, warnings
 
 
+# --- session role -------------------------------------------------------------
+# Each pushed event carries ONE tag naming what the session is for: `nocoach:<role>`.
+# The tag is the sole carrier of that fact — see the docstring for why nothing
+# downstream can infer it — so an event pushed without one is not "unlabelled" in any
+# recoverable way; it simply has no role, and every rule scoped to a role goes quiet.
+#
+# A missing role is a WARNING, and the workout is then pushed with no `nocoach:` tag at
+# all rather than a stand-in. Defaulting it to `other` is the tempting alternative and
+# the worse one: `other` is a real role meaning "a run with no role-scoped rule", so a
+# session that was meant to be `key` and simply didn't get labelled would go up as a
+# deliberate non-key run, and the week's key count would come back a confident wrong
+# number. Untagged degrades the other way — nothing downstream has a role to work with,
+# so the key count reads as unknown and the legs the morning after read as unverified.
+# "We don't know" is the honest failure; a plausible wrong number is not.
+#
+# A near-miss is still an ERROR, for that same reason rather than in spite of it.
+# `Long`, `longrun` and `tune-up` are all read downstream as no role at all, which is
+# indistinguishable from never having written one — except that the athlete believes the
+# week is labelled and won't see the `?` that would have told them otherwise. Exact
+# strings, lowercase; note the underscore in `tune_up`.
+#
+# What each one turns on downstream:
+#   key       the week's quality; counts toward the key ceiling
+#   long      the long run; continuity is read across it
+#   easy      the reference-band instrument reads here, on recovered legs only
+#   recovery  like easy, but the band instrument is suppressed: legs not recovered
+#   social    stoppage ignored and pace not read; volume still counts
+#   race      the goal race; no compliance verdict; taper and post-race key off it
+#   tune_up   a race that is a data point; quality stays three days clear of it
+#   strength  non-running; an entry with no session
+#   rest      a written rest day, zero steps, so the rest rule is checkable
+#   other     a run with no role-scoped rule
+ROLE_TAG = "nocoach:"
+ROLES = (
+    "key", "long", "easy", "recovery", "social",
+    "race", "tune_up", "strength", "rest", "other",
+)
+# Plausible ways to write a real role that are not the real role. Each is a way to lose
+# a week's labelling to a typo, so the error names the one that was meant.
+ROLE_NEAR_MISS = {
+    "long_run": "long", "longrun": "long", "lr": "long",
+    "tuneup": "tune_up", "tune": "tune_up", "parkrun": "tune_up", "time_trial": "tune_up",
+    "quality": "key", "session": "key", "workout": "key", "hard": "key",
+    "tempo": "key", "threshold": "key", "intervals": "key", "reps": "key", "hills": "key",
+    "gym": "strength", "core": "strength", "cross_training": "strength",
+    "off": "rest", "day_off": "rest", "none": "other", "null": "other",
+    "club": "social", "group": "social", "shakeout": "easy",
+}
+ROLE_COL = max(len(r) for r in ROLES)   # keeps the printed role column aligned
+
+
+def role_hint(value):
+    """The role a mistyped one was probably meant to be, or None."""
+    norm = value.strip().lower().replace("-", "_").replace(" ", "_")
+    return norm if norm in ROLES else ROLE_NEAR_MISS.get(norm)
+
+
+def lint_role(name, w):
+    """Return (errors, warnings) for one workout's `role:`.
+
+    A missing role is a warning and the workout goes up untagged (see the ROLES block).
+    A malformed one is an error: `Long`, `longrun` and `tune-up` are all read downstream
+    as no role at all, which is the failure this mechanism exists to prevent — every long
+    run reading as something else, the rules scoped to that role silently never firing,
+    and nothing on the athlete's side saying so.
+    """
+    role = w.get("role")
+    if role is None:
+        return [], [
+            f"{name}: no `role:` — pushing it untagged. Nothing downstream can then tell "
+            f"what this session was for (the name is free text; distance says nothing), so "
+            f"the week's key count reads as unknown rather than as a number, and the legs "
+            f"the morning after read as unverified. Add one of: {', '.join(ROLES)} "
+            f"(`other` for a run with no role-scoped rule)."
+        ]
+    if not isinstance(role, str):
+        return [
+            f"{name}: `role:` must be a single string, not {type(role).__name__}. Exactly "
+            f"one role per workout — an event carrying two is rejected downstream, since "
+            f"choosing between them would be a guess."
+        ], []
+    if role.strip() in ROLES:
+        return [], ([f"{name}: `role:` is padded with whitespace — trimmed before sending"]
+                    if role.strip() != role else [])
+    guess = role_hint(role)
+    said = f" Did you mean `{guess}`? " if guess else " "
+    return [
+        f"{name}: unknown role '{role}'.{said}The value is matched exactly — lowercase, "
+        f"and `tune_up` with an underscore. Valid: {', '.join(ROLES)}"
+    ], []
+
+
+def lint_tags(name, w):
+    """Return (errors, warnings) for a workout's own optional `tags:`.
+
+    The athlete's own labelling is welcome alongside the role tag and is ignored
+    downstream. A hand-written `nocoach:` tag is not: two of them on one event is a
+    hard failure there, so it is a hard failure here, where the fix is obvious.
+    """
+    tags = w.get("tags")
+    if tags is None:
+        return [], []
+    if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
+        return [f"{name}: `tags:` must be a list of strings (or absent)"], []
+    mine = [t for t in tags if t.strip().lower().startswith(ROLE_TAG)]
+    if mine:
+        return [
+            f"{name}: tag(s) {', '.join(repr(t) for t in mine)} set the session role by "
+            f"hand. Use `role:` instead — it is pushed as the {ROLE_TAG}… tag, and an "
+            f"event carrying two of those is rejected downstream."
+        ], []
+    return [], []
+
+
+NO_ROLE = "—"   # what the role column shows for a workout carrying none
+
+
+def event_tags(w):
+    """The tag list pushed for one workout: its role tag when it has one, then the
+    athlete's own. A workout with no role is pushed with no `nocoach:` tag rather than
+    a defaulted one — see the ROLES block for why that is the safer way to be wrong."""
+    role = w.get("role")
+    return ([ROLE_TAG + str(role).strip()] if role else []) + \
+           [str(t) for t in (w.get("tags") or [])]
+
+
+def role_cell(w):
+    """One workout's role, padded for the output column."""
+    role = w.get("role")
+    return f"{str(role).strip() if role else NO_ROLE:<{ROLE_COL}}"
+
+
+def role_of(ev):
+    """The role on a calendar event read back from the API, named the way the check-in
+    reads it. Returns the display string, not a role — 'no role' and 'AMBIGUOUS' are
+    both states worth seeing in --status output rather than errors to raise on."""
+    tags = ev.get("tags")
+    if not isinstance(tags, list):
+        return NO_ROLE
+    found = [t[len(ROLE_TAG):] for t in tags
+             if isinstance(t, str) and t.startswith(ROLE_TAG)]
+    if not found:
+        return NO_ROLE
+    if len(found) > 1:
+        return "AMBIGUOUS(" + ",".join(found) + ")"
+    return found[0]
+
+
 # --- description length --------------------------------------------------------
 # Garmin renders the WHOLE description twice — once in its "Overview" panel and
 # again under "Notes" — and it truncates the field past roughly a kilobyte,
@@ -367,6 +528,8 @@ def validate(workouts, targets_everywhere=False):
     for w in workouts:
         name = str(w.get("name", "?"))
         for e, wn in (lint_name(name),
+                      lint_role(name, w),
+                      lint_tags(name, w),
                       lint_description(name, w.get("description", ""), targets_everywhere)):
             errors += e
             warnings += wn
@@ -464,8 +627,15 @@ def show_status(creds, aid, dates):
         print("No workouts on the calendar for these dates.")
         return
     print(f"On the intervals.icu calendar ({min(dates)} … {max(dates)}):")
+    untagged = 0
     for ev in sorted(rows, key=lambda e: str(e.get("start_date_local", ""))):
-        print(f"  {str(ev.get('start_date_local', ''))[:10]}  {ev.get('name')}")
+        role = role_of(ev)
+        untagged += role == NO_ROLE
+        print(f"  {str(ev.get('start_date_local', ''))[:10]}  {role:<{ROLE_COL}}  {ev.get('name')}")
+    if untagged:
+        print(f"\n  warning: {untagged} of these carry no {ROLE_TAG}… role tag, so nothing "
+              f"downstream knows what those sessions were for. Re-push the week with "
+              f"--wipe to replace them with tagged events.")
 
 
 def main():
@@ -520,7 +690,10 @@ def main():
     if args.dry_run:
         date_guard(data.get("week"), dates, args.allow_past, enforce=False)
         for w in workouts:
-            print(f"[dry-run] {str(w['date'])}  {name_line(w['name'])}")
+            tags = event_tags(w)
+            extra = f"   tags: {', '.join(tags[1:])}" if len(tags) > 1 else ""
+            print(f"[dry-run] {str(w['date'])}  {role_cell(w)}  "
+                  f"{name_line(w['name'])}{extra}")
             print("  " + w.get("description", "").replace("\n", "\n  ").rstrip())
         return
 
@@ -537,10 +710,11 @@ def main():
             "start_date_local": f"{w['date']}T00:00:00",
             "name": w["name"],
             "description": w.get("description", ""),
+            "tags": event_tags(w),
         }
         r = requests.post(f"{BASE}/athlete/{aid}/events", json=payload, auth=creds, timeout=30)
         check(r)
-        print(f"pushed {str(w['date'])}  {name_line(w['name'])}")
+        print(f"pushed {str(w['date'])}  {role_cell(w)}  {name_line(w['name'])}")
 
     print(f"\nDone — {len(workouts)} workouts on intervals.icu; Garmin Connect picks them up shortly.")
 

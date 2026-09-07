@@ -10,6 +10,27 @@
 # "Long run 26km", "MP 3x5km", "Strength 45min". Plain ASCII, no emoji, no in-jokes.
 # The watch itself only shows the first 15 bytes (the FIT `wkt_name` field), which is
 # why the session type leads — push_week.py enforces this and prints the truncation.
+#
+# EVERY WORKOUT NEEDS A `role:`. It is pushed as a `nocoach:<role>` tag on the calendar
+# event, and it is the only record of what the session was FOR — the name is free text
+# and distance says nothing (one athlete's long run is another's easy run), so nothing
+# downstream can infer it. Without it the week's key count reads as unknown, the day
+# after a hard session can't be told from recovered legs, and a race is invisible to the
+# taper rules. push_week.py warns on a missing one and pushes that workout untagged, so
+# the week reads back as "we don't know" rather than as a wrong number; a MISSPELT one is
+# an error, because it reads downstream as no role while looking labelled. The ten, exactly
+# as written (lowercase; note the underscore in tune_up):
+#   key       the week's quality — counts toward the key ceiling
+#   long      the long run — continuity is read across it
+#   easy      the one role the reference-band instrument reads, on recovered legs
+#   recovery  like easy, but the band instrument is suppressed: legs not recovered
+#   social    club/group run — stoppage ignored, pace not read, volume still counts
+#   race      the goal race — no compliance verdict; taper and post-race key off it
+#   tune_up   a race that's a data point — quality stays three days clear of it
+#   strength  non-running — an entry with no session
+#   rest      a written rest day, zero steps, so the rest rule is checkable
+#   other     a run with no role-scoped rule — the escape hatch, so "no role" never is
+# Your own `tags:` can sit alongside it; don't hand-write a `nocoach:` one.
 week: YYYY-Wnn
 # targets: hard-only   # optional per-week override — targets on hard efforts only
 #                      # (default is 'all': pace/HR shown on every step)
@@ -17,6 +38,7 @@ workouts:
   - date: YYYY-MM-DD
     name: "Easy 7km + strides"
     type: Run
+    role: easy
     description: |
       - 7km
 
@@ -30,6 +52,7 @@ workouts:
   - date: YYYY-MM-DD
     name: "Reps 6x2min"
     type: Run
+    role: key
     description: |
       Warmup
       - 2km

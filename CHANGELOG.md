@@ -6,6 +6,38 @@ All notable changes to the robo-coach plugin. This project follows
 `/robo-coach:update` in your training repo to re-vendor the scripts and
 templates.
 
+## [0.1.6] — 2026-09-07
+
+### Added
+- **Every workout now carries a session `role:`, pushed as a `nocoach:<role>` calendar tag.**
+  The tag is the only record of what a session was *for*. Nothing reading a week back can
+  infer that: the workout name is free text, and distance says nothing, because one athlete's
+  long run is another's easy run. So an event pushed without one doesn't read as *unlabelled* —
+  it has no role at all, and a week of them makes a claim about the athlete rather than about
+  our labelling: the key-session count goes unknown, the morning after a threshold cannot be
+  told from recovered legs, and a race in the window is invisible to the taper and post-race
+  rules. Ten roles, matched exactly (lowercase; `tune_up` has an underscore): `key`, `long`,
+  `easy`, `recovery`, `social`, `race`, `tune_up`, `strength`, `rest`, `other`.
+- **A missing role warns and pushes the workout untagged**, rather than erroring or
+  defaulting. Defaulting to `other` is the tempting option and the worse one: `other` is a
+  real role meaning "a run with no role-scoped rule", so a session meant to be `key` that
+  simply didn't get labelled would go up as a deliberate non-key run and the week's key count
+  would come back a confident wrong number. Untagged degrades the other way — the key count
+  reads as unknown and the legs the morning after read as unverified. "We don't know" is the
+  honest failure; a plausible wrong number is not. Existing week files still push unchanged.
+- **A misspelt role is an error**, with a "did you mean" — `Long`, `longrun`, `tune-up` and
+  `tempo` are each read downstream as no role at all, which is indistinguishable from never
+  having written one, except that you believe the week is labelled and never see the unknown
+  that would have told you otherwise.
+- **`--status` now reads the role tags back off the calendar**, so a push can be verified as
+  having kept its roles rather than assumed, and warns when any event carries none. `--dry-run`
+  prints the role and any extra tags alongside each workout.
+- **A workout may carry its own `tags:`** (a list of strings) beside the role; they're passed
+  through untouched. Hand-writing a `nocoach:` tag there is an error — two role tags on one
+  event is a hard failure downstream, since choosing between them would be a guess.
+- The `check-in` skill, the training-repo `CLAUDE.md`, the README and the example week all
+  carry the convention; the example week's two sessions are tagged `easy` and `key`.
+
 ## [0.1.5] — 2026-09-07
 
 ### Added

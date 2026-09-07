@@ -32,6 +32,17 @@ See `README.md` for the human overview of the system.
   `intensity=interval` on the hard efforts. Without one, everything outside a
   `Warmup`/`Cooldown` block reaches the watch as a plain work step labelled "Run".
   `push_week.py` validates the value; intervals.icu silently drops one it doesn't recognise.
+- **Every workout carries a `role:`**, pushed as a `nocoach:<role>` tag on the calendar
+  event. It is the only record of what a session was *for*: the name is free text and
+  distance says nothing, so nothing reading the week back can infer it, and an untagged
+  week reads as a claim about the athlete rather than about our labelling — unknown key
+  count, no way to tell recovered legs the morning after a hard day, races invisible to
+  the taper rules. One of `key`, `long`, `easy`, `recovery`, `social`, `race`, `tune_up`,
+  `strength`, `rest`, `other` — matched exactly, lowercase, `tune_up` underscored.
+  `push_week.py` warns on a missing one and pushes that workout untagged — unknown beats
+  a wrong number, which is what defaulting it to `other` would produce — and errors on a
+  misspelt one, which would read downstream as no role while looking labelled.
+  `--status` reads the tags back.
 - **Workout names are public, so they are factual and standard.** Garmin can stamp the
   workout name onto the saved activity, which the athlete's Garmin Connect connections
   see. Write the session type FIRST, then the structure — `Easy 7km + strides`,

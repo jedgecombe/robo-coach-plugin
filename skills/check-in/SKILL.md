@@ -133,6 +133,25 @@ Keep week-by-week churn in the week file — `athlete.md` is durable memory, not
   rests, and `intensity=interval` to the hard efforts. `push_week.py` rejects a value
   intervals.icu doesn't accept — it silently drops unrecognised ones — and warns when a step
   labelled "recovery" carries no flag.
+- **Give every workout a `role:`.** It's pushed as a `nocoach:<role>` tag on the calendar
+  event and it is the *only* record of what the session was for — the name is free text and
+  distance says nothing (one athlete's long run is another's easy run), so nothing reading the
+  week back can infer it. An untagged week doesn't read as "unlabelled", it reads as a claim
+  about the athlete: the key count comes back unknown, the morning after a threshold can't be
+  told from recovered legs, and a race in the window is invisible to the taper and post-race
+  rules. The ten, exactly as written (lowercase, and `tune_up` has an underscore): `key`,
+  `long`, `easy`, `recovery`, `social`, `race`, `tune_up`, `strength`, `rest`, `other`. Pick
+  the one that matches what the session is *for*, not what it looks like — a club night is
+  `social` (its stoppage and pace are not read), a parkrun used as a data point is `tune_up`,
+  and `other` is the escape hatch so "no role" never has to be. `push_week.py` warns on a
+  missing role and pushes that workout untagged rather than defaulting it — an unlabelled
+  `key` session defaulted to `other` would make the week's key count a confident wrong
+  number, where untagged makes it an honest unknown. A **near-miss** like `Long` or
+  `tune-up` is an error, though: it reads downstream as no role at all while leaving you
+  believing the week is labelled. The athlete's own `tags:` may sit alongside; never
+  hand-write a `nocoach:` one. **The week `.md`'s Role column repeats it**, so the two agree
+  and the week is reviewable at a glance — count the `key` rows against the ceiling and check
+  none sit back to back before you push.
 - **Name every workout factually — the name is the one field other people see.** Garmin's
   "Activity Name" display preference has a *Workout Name (when available)* setting that
   stamps the workout's name onto the **saved activity**, which the athlete's Garmin Connect
@@ -178,14 +197,15 @@ so uv resolves them with no virtualenv or install step:
 ```bash
 uv run scripts/push_week.py weeks/<next-week>.yaml --dry-run   # validate + preview (+ date guard)
 uv run scripts/push_week.py weeks/<next-week>.yaml             # push (add --wipe to re-push an edited week)
-uv run scripts/push_week.py weeks/<next-week>.yaml --status    # confirm the workouts are on the calendar
+uv run scripts/push_week.py weeks/<next-week>.yaml --status    # confirm they're on the calendar, with roles
 ```
 
 The date guard will refuse a week that's entirely in the past — if it fires, your date is
 wrong, not the plan.
 
-**`--status` is not proof the workout is correct.** It lists event *names*, and a name says
-nothing about whether the steps carry the targets you wrote. **intervals.icu silently drops a
+**`--status` is not proof the workout is correct.** It lists event names and the role tag read
+back off each one — so it *does* prove the roles landed, and warns when any event carries none —
+but a name says nothing about whether the steps carry the targets you wrote. **intervals.icu silently drops a
 target it cannot parse** — the step is accepted as a bare duration, the push reports success,
 and the linter is no help because it only checks the text against its own regex. This is not
 hypothetical: on 2026-08-23 a whole HR-prescribed threshold session pushed "successfully" with
