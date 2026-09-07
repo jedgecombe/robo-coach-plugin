@@ -41,6 +41,13 @@ both its Overview and Notes panels and truncates long text, so a watch note is
 kept a short glanceable cue (the reasoning lives in the week's .md): the linter
 warns past ~500 characters and errors past ~800.
 
+Names are checked too, and more strictly than they look like they deserve: the
+name is the one field that ends up PUBLIC. Garmin stamps it onto the saved
+activity, which the athlete's connections see. So a name is factual and standard —
+"<session type> <structure>", plain ASCII — and the linter enforces that (see
+lint_name). It also prints what a watch will actually show, since the FIT field
+truncates at 15 bytes.
+
 Before a real push the script also runs a date guard. It uses THIS machine's
 real date (not the caller's, which can be stale) and refuses to push a week whose
 every workout is already in the past — the failure mode where a late check-in
@@ -122,6 +129,100 @@ EASY_GROUPS = (None, "warmup", "cooldown", "strides", "rest")
 CLAIMS_TARGET = re.compile(
     r"\bPace\b|\bLTHR\b|\bHR\b|\bbpm\b|\bBPM\b|\d:\d{2}\s*(-\s*\d:\d{2})?\s*/(km|mi)"
 )
+
+# --- workout name --------------------------------------------------------------
+# The name is the most public field in the whole payload. intervals.icu sends it on to
+# Garmin Connect as the workout name, and Garmin's "Activity Name" display preference
+# has a "Workout Name (when available)" setting that stamps it onto the SAVED ACTIVITY —
+# the one the athlete's Garmin Connect connections see in their feed, and the one the
+# activity page shows alongside the workout's steps either way. A name written as a
+# private joke is therefore published under the athlete's own account, long after the
+# joke has stopped being funny. So names here are factual and standard, and this is the
+# one piece of house style the linter enforces for taste rather than for correctness.
+#
+# Length is a device constraint, not a server one. intervals.icu declares no limit (its
+# OpenAPI spec types `name` as a bare string) and Garmin Connect stores a long name
+# fine — but the FIT workout message allocates `wkt_name` as a 16-byte array
+# (garmin/fit-c-sdk, FIT_WORKOUT_MESG_WKT_NAME_COUNT = 16): 15 bytes plus a terminator,
+# which is why a long name is cut on the watch itself. The first 15 bytes therefore
+# have to carry the meaning, which is exactly what the session-type-first rule buys —
+# "Threshold 4x10min" cuts to "Threshold 4x10" and still says what the session is,
+# where "Session 4 of the specific block" cuts to nothing useful at all.
+NAME_WATCH = 15   # bytes a watch shows before truncating (FIT wkt_name is 16 with its NUL)
+NAME_MAX = 42     # convention cap — past this the name is doing the description's job
+
+# A name opens with its session type. That keeps the truncated form identifying, and it
+# makes the calendar read as a training log rather than a mood board. The list is
+# deliberately broad: it exists to catch a jokey or cryptic name, not to police
+# vocabulary — extend it if a legitimate session type is missing.
+SESSION_TYPES = (
+    # running
+    "easy", "recovery", "steady", "long", "progression", "tempo", "threshold",
+    "intervals", "reps", "hills", "fartlek", "strides", "shakeout", "run",
+    "mp", "marathon", "half", "race", "time", "test", "warmup",
+    # everything else a week file legitimately carries
+    "bike", "ride", "swim", "row", "walk", "hike", "strength", "gym", "core",
+    "mobility", "yoga", "pilates", "cross", "rest", "off",
+)
+NAME_LEAD = re.compile(r"^[A-Za-z]+")
+
+
+def watch_name(name):
+    """What a Garmin will show for this name, or None when it fits as written.
+
+    The cut is on BYTES, not characters, because FIT stores wkt_name in a fixed-size
+    array — which is the other reason to keep a name plain ASCII: a single emoji
+    spends four of the fifteen bytes the watch has to work with.
+    """
+    raw = name.encode("utf-8")
+    if len(raw) <= NAME_WATCH:
+        return None
+    return raw[:NAME_WATCH].decode("utf-8", "ignore")
+
+
+def name_line(name):
+    """The name as it will be pushed, plus what the watch shows when they differ."""
+    cut = watch_name(name)
+    return name if cut is None else f'{name}   (watch: "{cut}")'
+
+
+def lint_name(name):
+    """Return (errors, warnings) for one workout's name.
+
+    Stricter than it looks like it needs to be, for the reason in the NAME_* block
+    above: this field gets published on the athlete's activity feed.
+    """
+    errors, warnings = [], []
+    n = name.strip()
+    if not n:
+        return ["a workout has a blank name"], warnings
+    if n != name:
+        warnings.append(f"{n}: name is padded with whitespace — trimmed before sending")
+    odd = sorted({c for c in n if not 32 <= ord(c) <= 126})
+    if odd:
+        errors.append(
+            f"{n}: name contains non-ASCII character(s) {', '.join(repr(c) for c in odd)}. "
+            f"Garmin publishes this name on the saved activity, watch fonts frequently "
+            f"can't render emoji, and each one spends up to four of the {NAME_WATCH} bytes "
+            f"the watch has. Keep names plain ASCII."
+        )
+    raw = len(n.encode("utf-8"))
+    if raw > NAME_MAX:
+        errors.append(
+            f"{n}: name is {raw} chars — over the {NAME_MAX}-char cap. The name says what "
+            f"the session IS; the execution cues belong in the description."
+        )
+    lead = NAME_LEAD.match(n)
+    if not lead or lead.group(0).lower() not in SESSION_TYPES:
+        errors.append(
+            f"{n}: name must open with the session type, so the watch-truncated form still "
+            f"identifies the session and the calendar reads as a training log — e.g. "
+            f"'Threshold 4x10min', 'Easy 8km + strides', 'Long run 26km', 'Strength 45min'. "
+            f"(Full vocabulary: SESSION_TYPES in push_week.py — extend it if a legitimate "
+            f"session type is missing.)"
+        )
+    return errors, warnings
+
 
 # --- description length --------------------------------------------------------
 # Garmin renders the WHOLE description twice — once in its "Overview" panel and
@@ -264,9 +365,11 @@ def validate(workouts, targets_everywhere=False):
     """Lint every workout; abort on errors, print warnings and continue."""
     errors, warnings = [], []
     for w in workouts:
-        e, wn = lint_description(w.get("name", "?"), w.get("description", ""), targets_everywhere)
-        errors += e
-        warnings += wn
+        name = str(w.get("name", "?"))
+        for e, wn in (lint_name(name),
+                      lint_description(name, w.get("description", ""), targets_everywhere)):
+            errors += e
+            warnings += wn
     for wn in warnings:
         print(f"  warning: {wn}")
     if errors:
@@ -389,6 +492,10 @@ def main():
     missing = [i for i, w in enumerate(workouts, 1) if not w.get("date") or not w.get("name")]
     if missing:
         sys.exit(f"{path}: workout(s) {missing} missing a date or name")
+    # Normalise names once, here, so the linted string and the pushed string are the
+    # same one — a name that lints clean after trimming must not be sent back padded.
+    for w in workouts:
+        w["name"] = str(w["name"]).strip()
     dates = sorted(str(w["date"]) for w in workouts)
 
     # --status is read-only; don't let a lint error block simply asking the
@@ -413,7 +520,7 @@ def main():
     if args.dry_run:
         date_guard(data.get("week"), dates, args.allow_past, enforce=False)
         for w in workouts:
-            print(f"[dry-run] {str(w['date'])}  {w['name']}")
+            print(f"[dry-run] {str(w['date'])}  {name_line(w['name'])}")
             print("  " + w.get("description", "").replace("\n", "\n  ").rstrip())
         return
 
@@ -433,7 +540,7 @@ def main():
         }
         r = requests.post(f"{BASE}/athlete/{aid}/events", json=payload, auth=creds, timeout=30)
         check(r)
-        print(f"pushed {str(w['date'])}  {w['name']}")
+        print(f"pushed {str(w['date'])}  {name_line(w['name'])}")
 
     print(f"\nDone — {len(workouts)} workouts on intervals.icu; Garmin Connect picks them up shortly.")
 

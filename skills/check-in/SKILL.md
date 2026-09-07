@@ -133,6 +133,30 @@ Keep week-by-week churn in the week file — `athlete.md` is durable memory, not
   rests, and `intensity=interval` to the hard efforts. `push_week.py` rejects a value
   intervals.icu doesn't accept — it silently drops unrecognised ones — and warns when a step
   labelled "recovery" carries no flag.
+- **Name every workout factually — the name is the one field other people see.** Garmin's
+  "Activity Name" display preference has a *Workout Name (when available)* setting that
+  stamps the workout's name onto the **saved activity**, which the athlete's Garmin Connect
+  connections see in their feed; the activity page shows it beside the workout's steps
+  either way. Whatever you write is published under their account, so write it the way a
+  coach writes a training log, not the way a running club names a group chat.
+  **Format: session type FIRST, then the structure** — `Easy 7km + strides`,
+  `Threshold 4x10min`, `Intervals 6x3min`, `Long run 26km`, `Long 26km + 3x3km MP`,
+  `MP 3x5km`, `Recovery 6km`, `Hills 8x60s`, `Progression 16km`, `Strength 45min`,
+  `Race 10km`. Plain ASCII, no emoji, no in-jokes, no nicknames, and nothing that
+  identifies the athlete or anyone else. The type leads because **the watch shows only the
+  first 15 bytes** — FIT stores `wkt_name` in a 16-byte field, so `Threshold 4x10min`
+  arrives as `Threshold 4x10` (still informative) while a name that opens with mood or
+  week-number arrives as noise. Garmin Connect keeps the full name; the watch does not.
+  `push_week.py` enforces the type-first and ASCII rules, caps the name at 42 characters,
+  and prints the truncated form so you can see what the watch will say.
+- **Use the same name in the `.md` day table's Session column** — verbatim, in backticks.
+  The two files are one week seen twice, so the Session column should be the thing you can
+  match against the watch, the calendar and the review at a glance; a differently-worded
+  label there means cross-referencing by memory. Anything the name leaves out — the gym
+  session, whether a run is droppable, the fuelling rate — goes in the **Detail** column
+  and the `.yaml` description, which is where that kind of specific already lives. So the
+  Session column names the session and the Detail column qualifies it; don't editorialise
+  in the Session column.
 - **Keep each `.yaml` description short — a glanceable cue, not the rationale.** Garmin shows
   the whole description *twice* (its Overview panel and again under Notes) and truncates long
   text, dropping the tail — which is exactly where the fuelling schedule and the "if the day

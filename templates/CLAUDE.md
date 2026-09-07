@@ -32,6 +32,16 @@ See `README.md` for the human overview of the system.
   `intensity=interval` on the hard efforts. Without one, everything outside a
   `Warmup`/`Cooldown` block reaches the watch as a plain work step labelled "Run".
   `push_week.py` validates the value; intervals.icu silently drops one it doesn't recognise.
+- **Workout names are public, so they are factual and standard.** Garmin can stamp the
+  workout name onto the saved activity, which the athlete's Garmin Connect connections
+  see. Write the session type FIRST, then the structure — `Easy 7km + strides`,
+  `Threshold 4x10min`, `Long run 26km`, `MP 3x5km`, `Strength 45min` — in plain ASCII,
+  with no emoji, in-jokes or nicknames. The type leads because a watch only shows the
+  first 15 bytes (the FIT `wkt_name` field), so the truncated form still has to identify
+  the session. `push_week.py` enforces it and prints what the watch will show. The week
+  `.md`'s Session column repeats the same name verbatim, so the table, the calendar and
+  the watch agree; what the name leaves out (gym, fuelling, whether a run is droppable)
+  goes in the **Detail** column and the `.yaml` description, never into the name.
 - **Reconcile the arithmetic before attributing anything to execution.** Strava reports
   the *whole activity*; a prescribed step is only part of it. A "6 km easy + 6 strides"
   day records ~8.6 km once the strides, their 60s recovery jogs and the jog home are

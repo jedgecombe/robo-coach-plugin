@@ -81,6 +81,15 @@ recovery jog or a standing rest — an unrecognised value is dropped and the ste
 watch as a plain "Run" — so the linter checks that too. If you ever push hand-written step syntax, check the calendar entry
 rather than trusting the "pushed" message.
 
+**And one that's social rather than technical.** The workout *name* is the field other
+people end up seeing: Garmin's "Activity Name" display preference can stamp it onto the
+saved activity, which your Garmin Connect connections see in their feed. So names here are
+factual and standard — session type first, then the structure (`Threshold 4x10min`,
+`Easy 7km + strides`, `Long run 26km`) — in plain ASCII, and `push_week.py` enforces that.
+Type-first also survives the watch: Garmin Connect keeps the full name, but the FIT
+`wkt_name` field is 16 bytes, so the watch itself shows only the first 15 and the linter
+prints the truncated form alongside each workout.
+
 ## Reading your week (Strava)
 
 The check-in pulls what you actually ran from **Strava**, read through an MCP connector — so

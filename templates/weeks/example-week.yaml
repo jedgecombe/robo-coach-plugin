@@ -3,12 +3,19 @@
 # bare duration) is enforced by push_week.py — see its docstring. Don't restate it.
 # Recovery jogs and standing rests need an explicit `intensity=` flag; without one
 # Garmin shows them as plain work steps ("Run"). push_week.py checks the value.
+#
+# NAMES ARE PUBLIC. Garmin can stamp the workout name onto the saved activity, which
+# your Garmin Connect connections see. So a name is factual and standard — the session
+# type FIRST, then the structure: "Easy 7km + strides", "Threshold 4x10min",
+# "Long run 26km", "MP 3x5km", "Strength 45min". Plain ASCII, no emoji, no in-jokes.
+# The watch itself only shows the first 15 bytes (the FIT `wkt_name` field), which is
+# why the session type leads — push_week.py enforces this and prints the truncation.
 week: YYYY-Wnn
 # targets: hard-only   # optional per-week override — targets on hard efforts only
 #                      # (default is 'all': pace/HR shown on every step)
 workouts:
   - date: YYYY-MM-DD
-    name: "Easy + 4 strides"
+    name: "Easy 7km + strides"
     type: Run
     description: |
       - 7km

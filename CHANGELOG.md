@@ -6,6 +6,50 @@ All notable changes to the robo-coach plugin. This project follows
 `/robo-coach:update` in your training repo to re-vendor the scripts and
 templates.
 
+## [0.1.5] — 2026-09-07
+
+### Added
+- **Privacy modes: `shareable` (default) and `private-data`.** `check_privacy.py` was built
+  for one arrangement — a repo holding the coaching *system* with the athlete gitignored —
+  but a private repo whose whole purpose is backing the athlete's data up inverts that rule,
+  and the strict checks then fail on every single commit. **A hook that always fails is a
+  hook you learn to bypass**, so the mode is now declared explicitly in `.privacy-mode` at
+  the repo root. **No file means `shareable`**: the strict mode is the default, and the mode
+  is never inferred from repo contents. `private-data` turns off the personal-path and
+  marker checks and in exchange requires every git remote to be pinned as
+  `verified-private: <url>` — a pre-commit hook has no network and no credentials, so it
+  cannot ask the host whether a repo is private, and a check that silently passes when it
+  cannot verify is worse than useless. Adding a remote, changing `origin`, or copying the
+  config into another repo all break the pin. **Secrets are refused in both modes** — `.env`
+  holds a live intervals.icu API key, and private today is not private after a fork, a
+  transfer, or an accidental visibility flip. New `--mode` flag prints which mode is active
+  and why.
+- **Workout names are now a checked field, because they are the public one.** Garmin's
+  "Activity Name" display preference has a *Workout Name (when available)* setting that
+  stamps the workout's name onto the **saved activity** — the one an athlete's Garmin
+  Connect connections see in their feed, and the one the activity page shows beside the
+  workout's steps either way. Nothing in the plugin had ever said so, so names were
+  freeform and a private joke could end up published under the athlete's own account.
+  The house convention is now **session type first, then the structure**, in plain
+  ASCII: `Easy 7km + strides`, `Threshold 4x10min`, `Long run 26km`, `MP 3x5km`,
+  `Strength 45min`. `push_week.py` errors on a name that doesn't open with a known
+  session type, on non-ASCII characters (emoji included), and past a 42-character cap.
+  The `check-in` skill, the training-repo `CLAUDE.md` and the example week carry the
+  convention; the example week's first session is renamed accordingly.
+- **The week `.md`'s Session column now repeats the workout name verbatim.** The `.md`
+  and the `.yaml` are one week seen twice, so a differently-worded label in the day table
+  meant cross-referencing the plan, the calendar and the watch by memory. The Session
+  column now names the session and the **Detail** column qualifies it — gym, fuelling
+  rate, whether a run is droppable — which is where that specific already lived.
+- **The push and dry-run output now show what the *watch* will display.** Garmin Connect
+  stores the full name, but FIT allocates `wkt_name` as a 16-byte array
+  (`FIT_WORKOUT_MESG_WKT_NAME_COUNT` in garmin/fit-c-sdk), so a device shows only the
+  first 15 bytes. Each workout line now prints the truncated form next to the name when
+  the two differ — which is the concrete reason the session type has to lead:
+  `Threshold 4x10min` arrives as `Threshold 4x10` and still says what the session is.
+  (intervals.icu itself imposes no limit — its OpenAPI spec types `name` as a bare
+  string — so the constraint is entirely device-side.)
+
 ## [0.1.4] — 2026-09-01
 
 ### Fixed
