@@ -27,6 +27,9 @@ See `README.md` for the human overview of the system.
   allows pace/HR targets on every step; set `ROBO_COACH_TARGETS=hard-only` in `.env` (or
   `targets: hard-only` in a week file) for the stricter "targets on hard efforts only, easy
   work by feel" mode. Run the linter; never restate or re-derive the rule in prose or new weeks.
+- **A pace range target must be at least 20 seconds wide, same centre.** A tighter band
+  sits inside a GPS watch's own pace noise, so the reading jitters in and out of the
+  target zone and the watch beeps almost continuously. `push_week.py` errors on it.
 - **Recovery and rest steps need an explicit `intensity=` flag** — `intensity=recovery` on
   recovery jogs and stride walk-backs, `intensity=rest` on standing rests,
   `intensity=interval` on the hard efforts. Without one, everything outside a

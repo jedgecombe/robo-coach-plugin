@@ -61,7 +61,7 @@ workouts:
       - 2km
 
       Main 6x
-      - 2m 4:05-4:15/km Pace intensity=interval
+      - 2m 4:00-4:20/km Pace intensity=interval
       - 90s intensity=recovery
 
       Cooldown

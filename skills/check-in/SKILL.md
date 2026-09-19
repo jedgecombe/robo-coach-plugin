@@ -126,6 +126,10 @@ Keep week-by-week churn in the week file — `athlete.md` is durable memory, not
   "targets on hard efforts only" — easy work carrying a bare duration, its pace guidance living
   in the prose — stamp `targets: hard-only` at the top of the week file, or set
   `ROBO_COACH_TARGETS=hard-only` in `.env` to make it the durable per-repo setting.
+- **A pace range must be at least 20 seconds wide, same centre.** Anything tighter sits
+  inside a GPS watch's own pace noise, so the reading jitters in and out of the target
+  zone and the watch beeps almost the whole step. `push_week.py` errors on a narrower
+  range — widen it around the pace you actually meant, don't just shift one edge.
 - **Flag every recovery and rest step with `intensity=`.** Without it, every step outside a
   `Warmup`/`Cooldown` block reaches the watch as a plain work step — the 90-second jog between
   reps shows on the Garmin as "Run", indistinguishable from the rep before it. Append

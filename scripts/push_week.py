@@ -31,6 +31,12 @@ work carries a bare duration, its pace guidance living in the prose) sets it
 per-repo with ROBO_COACH_TARGETS=hard-only in .env, or per-week with
 `targets: hard-only` at the top of the week file.
 
+A pace range target (`4:05-4:15/km Pace`) must be at least 20 seconds wide. Anything
+narrower sits inside a GPS watch's own pace noise, so the reading jitters in and out of
+the target zone and the watch beeps almost continuously for the rest of the step — no
+coaching benefit, just noise. Widen a too-tight range around the same centre; the linter
+errors on anything under 20s.
+
 Steps also take an optional `intensity=<value>` attribute. It is the only way to tell
 Garmin that a step is a recovery jog or a standing rest rather than work: without it
 every step outside a Warmup/Cooldown block reaches the watch labelled a plain "Run",
@@ -128,6 +134,13 @@ PACE_TARGET = re.compile(r"^\d:\d{2}(-\d:\d{2})?/(km|mi) Pace(\s.*)?$")
 HR_TARGET = re.compile(r"^\d+(\.\d+)?(-\d+(\.\d+)?)?% ?(LTHR|HR)(\s.*)?$")
 HR_ZONE_REF = re.compile(r"^Z\d+ ?(HR|Pace)(\s.*)?$")
 HR_BPM = re.compile(r"^\d+(-\d+)? ?(HR|bpm|BPM)(\s.*)?$")
+# A pace range narrower than this is inside a GPS watch's own pace noise: on flat, clean
+# GPS the reported pace still jitters by several seconds/km rep to rep, so a band tighter
+# than that reads as in-and-out of the target zone constantly and the watch beeps every
+# few seconds for the rest of the step. Minimum width, not a suggestion — captures the
+# group so the two sides can be compared in seconds; the centre is left wherever it was.
+PACE_RANGE_MIN_S = 20
+PACE_RANGE = re.compile(r"^(\d):(\d{2})-(\d):(\d{2})/(km|mi) Pace")
 # --- Garmin step intensity ----------------------------------------------------
 # intervals.icu carries the FIT `intensity` field through to Garmin, but ONLY from an
 # explicit `intensity=<value>` token on the step. There is no auto-detection worth
@@ -570,6 +583,20 @@ def lint_description(name, desc, targets_everywhere=False):
                 f"{name}: step '{line}' anchors on max HR (%HR) rather than "
                 f"threshold (%LTHR) — the same numbers mean a much harder effort"
             )
+        pace_range = PACE_RANGE.match(rest)
+        if pace_range:
+            m1, s1, m2, s2, _ = pace_range.groups()
+            lo = int(m1) * 60 + int(s1)
+            hi = int(m2) * 60 + int(s2)
+            width = hi - lo
+            if width < PACE_RANGE_MIN_S:
+                errors.append(
+                    f"{name}: step '{line}' — pace range is {width}s wide, under the "
+                    f"{PACE_RANGE_MIN_S}s minimum. A band that tight sits inside a GPS "
+                    f"watch's own pace noise, so it reads in and out of the target zone "
+                    f"constantly and beeps the whole step. Widen it (keep the same centre) "
+                    f"to at least {PACE_RANGE_MIN_S}s."
+                )
     n = len(desc)
     if n > DESC_MAX:
         errors.append(

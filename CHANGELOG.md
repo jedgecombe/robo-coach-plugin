@@ -6,6 +6,16 @@ All notable changes to the robo-coach plugin. This project follows
 `/robo-coach:update` in your training repo to re-vendor the scripts and
 templates.
 
+## [0.1.8] — 2026-09-19
+
+### Added
+- **Pace range targets now have a 20-second minimum width.** A tighter range sits inside
+  a GPS watch's own pace noise, so the reading jitters in and out of the target zone and
+  the watch beeps almost the whole step for no coaching benefit. `push_week.py` errors
+  on anything narrower — widen the range around the same centre pace, don't shift an
+  edge. Documented alongside the other step-target rules in the `check-in` skill and
+  `templates/CLAUDE.md`.
+
 ## [0.1.7] — 2026-09-07
 
 ### Changed
