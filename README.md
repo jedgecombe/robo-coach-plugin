@@ -30,13 +30,13 @@ The only thing you need to *install* it is **Claude Code** (desktop app or CLI) 
 runs the plugin for you. **You don't need git**, and there's nothing to clone by hand.
 
 **Point-and-click (no terminal):** in the Claude Code desktop app, open the plugin browser with
-`/plugin` → **Marketplaces** tab → add `jedgecombe/robo-coach-plugin` → **Discover** tab →
+`/plugin` → **Marketplaces** tab → add `jslug1000/robo-coach-plugin` → **Discover** tab →
 select **robo-coach** → **Install**.
 
 **Or by command** (in a terminal `claude` session, or typed into the app):
 
 ```bash
-/plugin marketplace add jedgecombe/robo-coach-plugin
+/plugin marketplace add jslug1000/robo-coach-plugin
 /plugin install robo-coach@robo-coach
 ```
 

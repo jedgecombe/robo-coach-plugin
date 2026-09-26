@@ -5,10 +5,10 @@
   "description": "An AI endurance coach for Claude Code. Each week it reviews the training you actually ran — read from Strava — the way a real coach would, then drafts an adapted next week and syncs the workouts to your Garmin watch via intervals.icu. You supply your own local, gitignored plan and athlete data; the plugin supplies the coaching discipline.",
   "author": {
     "name": "Jamie Edgecombe",
-    "url": "https://github.com/jedgecombe"
+    "url": "https://github.com/jslug1000"
   },
-  "homepage": "https://github.com/jedgecombe/robo-coach-plugin",
-  "repository": "https://github.com/jedgecombe/robo-coach-plugin",
+  "homepage": "https://github.com/jslug1000/robo-coach-plugin",
+  "repository": "https://github.com/jslug1000/robo-coach-plugin",
   "keywords": [
     "running",
     "marathon",
